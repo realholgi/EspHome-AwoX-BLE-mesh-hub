@@ -67,8 +67,8 @@ FoundDevice *AwoxMesh::add_to_found_devices(const esp32_ble_tracker::ESPBTDevice
   found_device->rssi = device.get_rssi();
   found_device->last_detected = esphome::millis();
 
-  this->set_rssi_for_devices_that_are_not_available();
-
+  // RSSI aging and discovery reclamation run on the periodic cleanup path,
+  // not on every BLE advertisement.
   this->sort_devices();
 
   return found_device;

@@ -54,6 +54,9 @@ class ConnectionRegressions(unittest.TestCase):
         self.assertIn("!found_device->connected && !reserved", MESH_CPP)
         self.assertIn("delete found_device;", MESH_CPP)
         self.assertIn("FOUND_DEVICE_RECLAIM_MS = 600000", MESH_H)
+        discovery = MESH_CPP.split("FoundDevice *AwoxMesh::add_to_found_devices(")[1].split(
+            "bool AwoxMesh::parse_device(")[0]
+        self.assertNotIn("set_rssi_for_devices_that_are_not_available()", discovery)
 
     def test_mesh_secrets_not_logged(self):
         self.assertNotIn('ESP_LOGI("awox.mesh", "password:', MESH_H)
