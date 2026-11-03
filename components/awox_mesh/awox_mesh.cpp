@@ -569,15 +569,26 @@ void AwoxMesh::send_discovery(Device *device) {
 }
 
 void AwoxMesh::send_group_discovery(Group *group) {
-  if (group->device_info == nullptr) {
-    ESP_LOGW(TAG, "'%s': Can not yet send discovery, component_type not known...",
-             std::to_string(group->group_id).c_str());
-    return;
+  if (group->device_info == nullptr) return;
+  if (this->publish_connection->send_group_discovery(group))
+    group->send_discovery = true;
+}
+
+void AwoxMesh::refresh_mqtt_discovery() {
+  for (auto *device : this->mesh_devices_) {
+    if (device->address_set() && device->device_info != nullptr) {
+      device->send_discovery = false;
+      this->send_discovery(device);
+      this->publish_state(device);
+    }
   }
-
-  group->send_discovery = true;
-
-  this->publish_connection->send_group_discovery(group);
+  for (auto *group : this->mesh_groups_) {
+    if (group->device_info != nullptr) {
+      group->send_discovery = false;
+      this->send_group_discovery(group);
+      if (group->can_publish_state()) this->publish_state(group);
+    }
+  }
 }
 
 void AwoxMesh::call_connection(int dest, std::function<void(MeshConnection *)> &&callback) {

@@ -38,6 +38,16 @@ class ConnectionRegressions(unittest.TestCase):
         self.assertIn("if (++item.attempts >= MAX_COMMAND_ATTEMPTS)", CONN_CPP)
         self.assertIn("this->command_queue.clear();", CONN_CPP)
         self.assertIn("this->command_queue.size() >= MAX_QUEUED_COMMANDS", CONN_CPP)
+    def test_mqtt_caches_follow_successful_publish_and_reconnect(self):
+        mqtt = (ROOT / "components/awox_mesh/awox_mesh_mqtt.cpp").read_text()
+        header = (ROOT / "components/awox_mesh/awox_mesh_mqtt.h").read_text()
+        self.assertIn("this->last_published_state_.clear()", mqtt)
+        self.assertIn("this->last_published_availability_.clear()", mqtt)
+        self.assertIn("this->mesh_->refresh_mqtt_discovery()", mqtt)
+        self.assertIn("if (status_published)", mqtt)
+        self.assertIn("if (published) this->last_published_state_", mqtt)
+        self.assertIn("if (global_mqtt_client->publish(", mqtt)
+        self.assertIn("std::set<int> subscribed_destinations_", header)
 
 
 if __name__ == "__main__":

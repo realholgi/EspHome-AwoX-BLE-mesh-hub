@@ -3,6 +3,7 @@
 #ifdef USE_ESP32
 
 #include <map>
+#include <set>
 #include <vector>
 
 #include "mesh_destination.h"
@@ -22,8 +23,10 @@ class AwoxMeshMqtt {
 
   std::map<int, MeshDestinationState> last_published_state_;
   std::map<int, bool> last_published_availability_;
-  int last_published_active_connections_;
-  int last_published_online_devices_;
+  int last_published_active_connections_{-1};
+  int last_published_online_devices_{-1};
+  bool mqtt_was_connected_{false};
+  std::set<int> subscribed_destinations_{};
 
   std::string get_mqtt_topic_for_(MeshDestination *mesh_destination, const std::string &suffix) const;
 
@@ -39,7 +42,7 @@ class AwoxMeshMqtt {
   void publish_availability(Device *device);
   void publish_availability(Group *group);
   bool send_discovery(Device *device);
-  void send_group_discovery(Group *group);
+  bool send_group_discovery(Group *group);
   void publish_connection_sensor_discovery(const std::vector<MeshConnection *> &connections);
   void publish_connected(int active_connections, int online_devices, const std::vector<MeshConnection *> &connections);
   void publish_state(MeshDestination *mesh_destination);

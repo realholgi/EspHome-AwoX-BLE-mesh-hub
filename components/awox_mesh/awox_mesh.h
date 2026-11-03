@@ -139,6 +139,7 @@ class AwoxMesh : public esp32_ble_tracker::ESPBTDeviceListener, public Component
   void publish_availability(Device *device, bool delayed);
 
   void send_discovery(Device *device);
+  void refresh_mqtt_discovery();
 
   void publish_state(MeshDestination *mesh_destination);
 

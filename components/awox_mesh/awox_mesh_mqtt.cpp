@@ -56,6 +56,18 @@ std::string AwoxMeshMqtt::get_mqtt_topic_for_(MeshDestination *mesh_destination,
 
 void AwoxMeshMqtt::publish_connected(int active_connections, int online_devices,
                                      const std::vector<MeshConnection *> &connections) {
+  if (!global_mqtt_client->is_connected()) {
+    this->mqtt_was_connected_ = false;
+    return;
+  }
+  const bool reconnected = !this->mqtt_was_connected_;
+  if (reconnected) {
+    this->mqtt_was_connected_ = true;
+    this->last_published_state_.clear();
+    this->last_published_availability_.clear();
+    this->last_published_active_connections_ = -1;
+    this->last_published_online_devices_ = -1;
+  }
   if (!this->published_connected) {
     // todo.... find proper solution
     // stop_listening_for_availability
@@ -63,24 +75,21 @@ void AwoxMeshMqtt::publish_connected(int active_connections, int online_devices,
     this->published_connected = true;
   }
 
-  if ((this->last_published_active_connections_ > 0) != (active_connections > 0)) {
+  if (this->last_published_active_connections_ < 0 ||
+      (this->last_published_active_connections_ > 0) != (active_connections > 0)) {
     const std::string message = active_connections > 0 ? "online" : "offline";
     ESP_LOGI(TAG, "Publish mesh connection status: %s", message.c_str());
 
     global_mqtt_client->publish(global_mqtt_client->get_topic_prefix() + "/connected", message, 0, true);
   }
 
-  if (this->last_published_active_connections_ == active_connections &&
-      this->last_published_online_devices_ == online_devices) {
-    return;
-  }
+  const bool changed = this->last_published_active_connections_ != active_connections ||
+                       this->last_published_online_devices_ != online_devices;
+  if (!changed && !reconnected) return;
 
   ESP_LOGI(TAG, "Publish connection info, %d connections, %d device online", active_connections, online_devices);
 
-  this->last_published_online_devices_ = online_devices;
-  this->last_published_active_connections_ = active_connections;
-
-  global_mqtt_client->publish_json(
+  const bool status_published = global_mqtt_client->publish_json(
       global_mqtt_client->get_topic_prefix() + "/connection_status",
       [&](JsonObject root) {
         root["active_connections"] = active_connections;
@@ -100,6 +109,14 @@ void AwoxMeshMqtt::publish_connected(int active_connections, int online_devices,
         }
       },
       0, false);
+  if (status_published) {
+    this->last_published_online_devices_ = online_devices;
+    this->last_published_active_connections_ = active_connections;
+  }
+  if (reconnected) {
+    this->publish_connection_sensor_discovery(connections);
+    this->mesh_->refresh_mqtt_discovery();
+  }
 }
 
 void AwoxMeshMqtt::publish_availability(Device *device) {
@@ -107,11 +124,10 @@ void AwoxMeshMqtt::publish_availability(Device *device) {
       this->last_published_availability_[device->dest()] == device->online) {
     return;
   }
-  this->last_published_availability_[device->dest()] = device->online;
-
   const std::string message = device->online ? "online" : "offline";
   ESP_LOGI(TAG, "Publish online/offline for device %u - %s", device->mesh_id, message.c_str());
-  global_mqtt_client->publish(this->get_mqtt_topic_for_(device, "availability"), message, 0, true);
+  if (global_mqtt_client->publish(this->get_mqtt_topic_for_(device, "availability"), message, 0, true))
+    this->last_published_availability_[device->dest()] = device->online;
 }
 
 void AwoxMeshMqtt::publish_availability(Group *group) {
@@ -119,11 +135,10 @@ void AwoxMeshMqtt::publish_availability(Group *group) {
       this->last_published_availability_[group->dest()] == group->online) {
     return;
   }
-  this->last_published_availability_[group->dest()] = group->online;
-
   const std::string message = group->online ? "online" : "offline";
   ESP_LOGI(TAG, "Publish online/offline for group %u - %s", group->group_id, message.c_str());
-  global_mqtt_client->publish(this->get_mqtt_topic_for_(group, "availability"), message, 0, true);
+  if (global_mqtt_client->publish(this->get_mqtt_topic_for_(group, "availability"), message, 0, true))
+    this->last_published_availability_[group->dest()] = group->online;
 }
 
 void AwoxMeshMqtt::publish_state(MeshDestination *mesh_destination) {
@@ -140,12 +155,11 @@ void AwoxMeshMqtt::publish_state(MeshDestination *mesh_destination) {
     return;
   }
 
-  this->last_published_state_[mesh_destination->dest()] = mesh_destination->state_as_char();
-
   ESP_LOGD(TAG, "Publish state for %s", mesh_destination->state_as_string().c_str());
 
+  bool published = false;
   if (mesh_destination->device_info->has_feature(FEATURE_LIGHT_MODE)) {
-    global_mqtt_client->publish_json(
+    published = global_mqtt_client->publish_json(
         this->get_mqtt_topic_for_(mesh_destination, "state"),
         [this, mesh_destination](JsonObject root) {
           root["state"] = mesh_destination->state ? "ON" : "OFF";
@@ -182,9 +196,10 @@ void AwoxMeshMqtt::publish_state(MeshDestination *mesh_destination) {
         },
         0, true);
   } else {
-    global_mqtt_client->publish(this->get_mqtt_topic_for_(mesh_destination, "state"),
+    published = global_mqtt_client->publish(this->get_mqtt_topic_for_(mesh_destination, "state"),
                                 mesh_destination->state ? "ON" : "OFF", mesh_destination->state ? 2 : 3, 0, true);
   }
+  if (published) this->last_published_state_[mesh_destination->dest()] = mesh_destination->state_as_char();
 }
 
 void AwoxMeshMqtt::publish_connection_sensor_discovery(const std::vector<MeshConnection *> &connections) {
@@ -407,11 +422,12 @@ bool AwoxMeshMqtt::send_discovery(Device *device) {
     return false;
   }
 
-  if (device->device_info->has_feature(FEATURE_LIGHT_MODE)) {
+  const bool newly_subscribed = this->subscribed_destinations_.insert(device->dest()).second;
+  if (newly_subscribed && device->device_info->has_feature(FEATURE_LIGHT_MODE)) {
     global_mqtt_client->subscribe_json(
         this->get_mqtt_topic_for_(device, "command"),
         [this, device](const std::string &topic, JsonObject root) { this->process_incomming_command(device, root); });
-  } else {
+  } else if (newly_subscribed) {
     global_mqtt_client->subscribe(this->get_mqtt_topic_for_(device, "command"),
                                   [this, device](const std::string &topic, const std::string &payload) {
                                     ESP_LOGI(TAG, "command %s - %s", topic.c_str(), payload.c_str());
@@ -438,22 +454,22 @@ bool AwoxMeshMqtt::send_discovery(Device *device) {
   return true;
 }
 
-void AwoxMeshMqtt::send_group_discovery(Group *group) {
+bool AwoxMeshMqtt::send_group_discovery(Group *group) {
   if (group->device_info == nullptr) {
     ESP_LOGW(TAG, "'%s': Can not yet send discovery, component_type not known...",
              std::to_string(group->group_id).c_str());
-    return;
+    return false;
   }
 
   // Ignore groups that don't represent lights (for example plug-only groups).
   if (!group->device_info->has_feature(FEATURE_LIGHT_MODE)) {
     ESP_LOGI(TAG, "[%u] Non-light group ignored", group->group_id);
-    return;
+    return true;
   }
 
   const MQTTDiscoveryInfo &discovery_info = global_mqtt_client->get_discovery_info();
 
-  global_mqtt_client->publish_json(
+  const bool published = global_mqtt_client->publish_json(
       discovery_info.prefix + "/" + group->device_info->get_component_type() + "/group-" +
           std::to_string(group->group_id) + "/config",
       [this, group, discovery_info](JsonObject root) {
@@ -530,14 +546,15 @@ void AwoxMeshMqtt::send_group_discovery(Group *group) {
       },
       0, discovery_info.retain);
 
-  if (group->device_info->has_feature(FEATURE_LIGHT_MODE)) {
+  if (!published) return false;
+
+  if (this->subscribed_destinations_.insert(group->dest()).second) {
     global_mqtt_client->subscribe_json(
         this->get_mqtt_topic_for_(group, "command"),
         [this, group](const std::string &topic, JsonObject root) { this->process_incomming_command(group, root); });
-  } else {
-    ESP_LOGE(TAG, "Non light group isn't supported currently");
   }
   this->publish_availability(group);
+  return true;
 }
 
 void AwoxMeshMqtt::process_incomming_command(MeshDestination *mesh_destination, JsonObject root) {
