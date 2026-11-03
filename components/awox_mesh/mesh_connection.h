@@ -74,11 +74,11 @@ class MeshConnection : public esp32_ble_client::BLEClientBase {
 
   std::string reverse_address;
 
-  FoundDevice *found_device;
+  FoundDevice *found_device{nullptr};
 
-  esp32_ble_client::BLECharacteristic *notification_char;
-  esp32_ble_client::BLECharacteristic *command_char;
-  esp32_ble_client::BLECharacteristic *pair_char;
+  esp32_ble_client::BLECharacteristic *notification_char{nullptr};
+  esp32_ble_client::BLECharacteristic *command_char{nullptr};
+  esp32_ble_client::BLECharacteristic *pair_char{nullptr};
 
   void setup_connection();
 

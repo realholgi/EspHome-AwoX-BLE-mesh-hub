@@ -193,15 +193,12 @@ void AwoxMesh::loop() {
 
 void AwoxMesh::disconnect_connections_with_overlapping_mesh_ids() {
   const int connections_count = this->connections_.size();
-  for (int i = 0; i < connections_count; i++) {
-    if (this->connections_[i]->get_address() == 0) {
-      continue;
-    }
-    if (i - 1 >= 0 && this->connections_[i - 1]->connected()) {
-      this->disconnect_connection_with_overlapping_mesh_ids(i - 1, i);
-    }
-    if (i + 1 < connections_count && this->connections_[i + 1]->connected()) {
-      this->disconnect_connection_with_overlapping_mesh_ids(i + 1, i);
+  for (int i = 0; i < connections_count; ++i) {
+    if (!this->connections_[i]->connected()) continue;
+    for (int j = i + 1; j < connections_count; ++j) {
+      if (this->connections_[j]->connected()) {
+        this->disconnect_connection_with_overlapping_mesh_ids(i, j);
+      }
     }
   }
 }
@@ -271,7 +268,14 @@ FoundDevice *AwoxMesh::next_to_connect() {
       linked_mesh_ids.size(), known_mesh_devices, identified_mesh_devices);
 
   for (auto *found_device : this->found_devices_) {
-    if (!found_device->connected && found_device->rssi >= this->minimum_rssi) {
+    const uint64_t address = found_device->device.address_uint64();
+    // A connection attempt reserves its target MAC before GATT is established.
+    // Check both the discovered-device flag and every BLE slot, including
+    // CONNECTING/IDLE slots, to avoid racing the same lamp twice.
+    const bool already_reserved = std::any_of(
+        this->connections_.begin(), this->connections_.end(),
+        [address](const MeshConnection *connection) { return connection->get_address() == address; });
+    if (!found_device->connected && !already_reserved && found_device->rssi >= this->minimum_rssi) {
       // unknown mesh_id then the device is definitly not in reach of our current connection
       if (found_device->mesh_id == 0) {
         ESP_LOGD(TAG, "Try to connecty to device %s no mesh id known yet",

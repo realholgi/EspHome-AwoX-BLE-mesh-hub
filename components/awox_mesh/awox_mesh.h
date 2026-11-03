@@ -35,7 +35,7 @@ struct FoundDevice {
   uint32_t last_detected;
   esp32_ble_tracker::ESPBTDevice device;
   bool connected = false;
-  int mesh_id;
+  int mesh_id{0};
 };
 
 class AwoxMesh : public esp32_ble_tracker::ESPBTDeviceListener, public Component {

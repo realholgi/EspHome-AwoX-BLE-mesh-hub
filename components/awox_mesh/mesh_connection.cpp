@@ -65,6 +65,7 @@ void MeshConnection::connect_to(FoundDevice *found_device) {
 void MeshConnection::set_address(uint64_t address) {
   if (this->found_device) {
     this->found_device->connected = false;
+    this->found_device = nullptr;
   }
 
   if (address == 0) {
