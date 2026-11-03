@@ -48,6 +48,12 @@ class ConnectionRegressions(unittest.TestCase):
         self.assertIn("if (published) this->last_published_state_", mqtt)
         self.assertIn("if (global_mqtt_client->publish(", mqtt)
         self.assertIn("std::set<int> subscribed_destinations_", header)
+    def test_rssi_cleanup_is_throttled_and_stale_devices_reclaimed(self):
+        self.assertIn("now - this->last_found_device_cleanup >= FOUND_DEVICE_RSSI_TIMEOUT_MS", MESH_CPP)
+        self.assertIn("age >= FOUND_DEVICE_RECLAIM_MS", MESH_CPP)
+        self.assertIn("!found_device->connected && !reserved", MESH_CPP)
+        self.assertIn("delete found_device;", MESH_CPP)
+        self.assertIn("FOUND_DEVICE_RECLAIM_MS = 600000", MESH_H)
 
 
 if __name__ == "__main__":

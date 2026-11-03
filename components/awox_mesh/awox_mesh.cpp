@@ -186,7 +186,7 @@ void AwoxMesh::loop() {
     }
   }
 
-  if (now - this->last_found_device_cleanup < 20000) {
+  if (now - this->last_found_device_cleanup >= FOUND_DEVICE_RSSI_TIMEOUT_MS) {
     this->set_rssi_for_devices_that_are_not_available();
   }
 }
@@ -295,15 +295,33 @@ FoundDevice *AwoxMesh::next_to_connect() {
 }
 
 void AwoxMesh::set_rssi_for_devices_that_are_not_available() {
-  this->last_found_device_cleanup = esphome::millis();
+  const uint32_t now = esphome::millis();
+  this->last_found_device_cleanup = now;
   char addr_buf[MAC_ADDRESS_PRETTY_BUFFER_SIZE];
-  for (auto *found_device : this->found_devices_) {
-    if (found_device->rssi > RSSI_NOT_AVAILABLE &&
-        this->last_found_device_cleanup - found_device->last_detected > 20000) {
-      ESP_LOGD(TAG, "Clear RSSI for %s [%u] not found the last 20 seconds",
+
+  for (auto it = this->found_devices_.begin(); it != this->found_devices_.end();) {
+    FoundDevice *found_device = *it;
+    const uint32_t age = now - found_device->last_detected;
+
+    // Only reclaim devices that no BLE slot still owns, including pending connects.
+    const uint64_t address = found_device->device.address_uint64();
+    const bool reserved = std::any_of(
+        this->connections_.begin(), this->connections_.end(),
+        [address](const MeshConnection *connection) { return connection->get_address() == address; });
+    if (!found_device->connected && !reserved && age >= FOUND_DEVICE_RECLAIM_MS) {
+      ESP_LOGD(TAG, "Remove stale BLE device %s",
+               found_device->device.address_str_to(addr_buf));
+      delete found_device;
+      it = this->found_devices_.erase(it);
+      continue;
+    }
+
+    if (found_device->rssi > RSSI_NOT_AVAILABLE && age >= FOUND_DEVICE_RSSI_TIMEOUT_MS) {
+      ESP_LOGD(TAG, "Clear RSSI for %s [%u] not found recently",
                found_device->device.address_str_to(addr_buf), found_device->mesh_id);
       found_device->rssi = RSSI_NOT_AVAILABLE;
     }
+    ++it;
   }
 }
 
