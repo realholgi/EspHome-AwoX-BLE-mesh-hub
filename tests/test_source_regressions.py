@@ -171,6 +171,17 @@ class ConnectionRegressions(unittest.TestCase):
         self.assertNotIn("call_connection(", body)
         self.assertNotIn("global_mqtt_client", body)
 
+    def test_optional_gatt_revision_reads_follow_mesh_authentication(self):
+        self.assertIn("this->get_characteristic(0x180A, 0x2A26)", CONN_CPP)
+        self.assertIn("this->get_characteristic(0x180A, 0x2A27)", CONN_CPP)
+        self.assertIn("this->mesh_authenticated_ = true;", CONN_CPP)
+        self.assertIn("this->request_next_revision_();", CONN_CPP)
+        self.assertIn("this->pending_revision_handle_ = 0;", CONN_CPP)
+        self.assertIn("this->mesh_->set_device_revision(this->get_address(), is_firmware, revision)", CONN_CPP)
+        self.assertIn("parse_revision_string(param->read.value, param->read.value_len)", CONN_CPP)
+        self.assertIn("this->device_revisions_[mac]", MESH_CPP)
+        self.assertIn("this->device_revisions_.find(device->address_uint64())", MESH_CPP)
+
 
 if __name__ == "__main__":
     unittest.main()

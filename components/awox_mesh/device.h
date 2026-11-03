@@ -31,6 +31,10 @@ class Device : public MeshDestination {
 
   uint32_t device_info_requested = 0;
 
+  // Optional BLE Device Information values, resolved by the actual MAC.
+  std::string firmware_revision{};
+  std::string hardware_revision{};
+
   int dest() override { return this->mesh_id; };
 
   const char *type() const override { return "device"; }

@@ -25,6 +25,10 @@ jobs:
         run: |
           c++ -std=c++17 -Wall -Wextra -Werror -pedantic -I. tests/test_protocol_safety.cpp -o /tmp/awox_protocol_tests
           /tmp/awox_protocol_tests
+      - name: Build and run native GATT revision parser tests
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Werror -pedantic -I. tests/test_revision_utils.cpp -o /tmp/awox_revision_tests
+          /tmp/awox_revision_tests
 
   firmware:
     name: ESPHome 2026.10.2 / ESP-IDF compile

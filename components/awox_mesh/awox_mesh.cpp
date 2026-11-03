@@ -612,6 +612,21 @@ void AwoxMesh::publish_state(MeshDestination *mesh_destination) {
   }
 }
 
+void AwoxMesh::set_device_revision(uint64_t mac, bool firmware, const std::string &revision) {
+  if (mac == 0 || revision.empty()) return;
+  auto &revisions = this->device_revisions_[mac];
+  std::string &current = firmware ? revisions.firmware : revisions.hardware;
+  if (current == revision) return;
+  current = revision;
+  // The mesh status report may identify the MAC after the GATT revision read.
+  // Store by MAC until discovery resolves to a Device.
+  Device *device = this->get_device(mac);
+  if (device != nullptr) {
+    device->firmware_revision = revisions.firmware;
+    device->hardware_revision = revisions.hardware;
+  }
+}
+
 void AwoxMesh::send_discovery(Device *device) {
   if (device->send_discovery) {
     return;
@@ -624,6 +639,11 @@ void AwoxMesh::send_discovery(Device *device) {
   }
 
   device->device_info = this->device_info_resolver->get_by_product_id(device->product_id);
+  const auto versions = this->device_revisions_.find(device->address_uint64());
+  if (versions != this->device_revisions_.end()) {
+    device->firmware_revision = versions->second.firmware;
+    device->hardware_revision = versions->second.hardware;
+  }
   if (this->publish_connection->send_discovery(device)) {
     device->send_discovery = true;
   }

@@ -39,6 +39,11 @@ struct FoundDevice {
 };
 
 // Non-owning, read-only display view. No MQTT round trip or BLE polling.
+struct MeshDeviceRevisions {
+  std::string firmware;
+  std::string hardware;
+};
+
 struct GatewayDisplayStatus {
   bool connected{false};
   bool lamp_known{false};
@@ -162,6 +167,7 @@ class AwoxMesh : public esp32_ble_tracker::ESPBTDeviceListener, public Component
 
   void send_discovery(Device *device);
   void refresh_mqtt_discovery();
+  void set_device_revision(uint64_t mac, bool firmware, const std::string &revision);
 
   void publish_state(MeshDestination *mesh_destination);
 
@@ -186,6 +192,7 @@ class AwoxMesh : public esp32_ble_tracker::ESPBTDeviceListener, public Component
   std::vector<Group *> mesh_groups_{};
   std::vector<int> allowed_mesh_ids_{};
   std::vector<uint64_t> allowed_mac_addresses_{};
+  std::map<uint64_t, MeshDeviceRevisions> device_revisions_{};
 
   void request_device_info(Device *device);
   void request_status_update(int dest);

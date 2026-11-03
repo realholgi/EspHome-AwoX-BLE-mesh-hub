@@ -7,6 +7,7 @@
 #include "device_info.h"
 #include "helpers.h"
 #include "protocol_safety.h"
+#include "revision_utils.h"
 #include "group.h"
 #include "aes/esp_aes.h"
 #include "esphome/core/application.h"
@@ -50,6 +51,11 @@ static std::string encrypt(std::string key, std::string data) {
 static int get_product_code(unsigned char part1, unsigned char part2) { return int(part2); }
 
 void MeshConnection::connect_to(FoundDevice *found_device) {
+  this->mesh_authenticated_ = false;
+  this->next_revision_kind_ = 0;
+  this->pending_revision_handle_ = 0;
+  this->firmware_revision_char_ = nullptr;
+  this->hardware_revision_char_ = nullptr;
   ++this->connection_attempts_;
   this->established_session_ = false;
   this->last_rssi_dbm_ = found_device->rssi;
@@ -80,6 +86,11 @@ void MeshConnection::set_address(uint64_t address) {
   }
 
   if (address == 0) {
+    this->mesh_authenticated_ = false;
+    this->next_revision_kind_ = 0;
+    this->pending_revision_handle_ = 0;
+    this->firmware_revision_char_ = nullptr;
+    this->hardware_revision_char_ = nullptr;
     if (this->established_session_)
       ++this->disconnect_count_;
     else
@@ -121,6 +132,18 @@ void MeshConnection::set_address(uint64_t address) {
 
 void MeshConnection::loop() {
   esp32_ble_client::BLEClientBase::loop();
+
+  // Version reads are optional and deferred until AFTER mesh pairing. Do not
+  // start a second GATT read while the previous read is still outstanding.
+  if (this->connected() && this->mesh_authenticated_) {
+    if (this->pending_revision_handle_ != 0 &&
+        esphome::millis() - this->pending_revision_started_ms_ > 5000) {
+      ESP_LOGD(TAG, "BLE Device Information read timed out");
+      this->pending_revision_handle_ = 0;
+    }
+    if (this->pending_revision_handle_ == 0 && this->next_revision_kind_ < 2)
+      this->request_next_revision_();
+  }
 
   if (!this->connected() || this->command_queue.empty()) return;
   const uint32_t now = esphome::millis();
@@ -212,6 +235,21 @@ bool MeshConnection::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
     case ESP_GATTC_READ_CHAR_EVT: {
       if (param->read.conn_id != this->get_conn_id())
         break;
+      if (this->pending_revision_handle_ != 0 &&
+          param->read.handle == this->pending_revision_handle_) {
+        const bool is_firmware = this->pending_revision_kind_ == 0;
+        this->pending_revision_handle_ = 0;
+        if (param->read.status == ESP_GATT_OK) {
+          const std::string revision = parse_revision_string(param->read.value, param->read.value_len);
+          if (!revision.empty()) {
+            this->mesh_->set_device_revision(this->get_address(), is_firmware, revision);
+            ESP_LOGI(TAG, "Read %s revision: %s", is_firmware ? "firmware" : "hardware", revision.c_str());
+          }
+        } else {
+          ESP_LOGD(TAG, "Optional Device Information revision read failed, status=%d", param->read.status);
+        }
+        break;
+      }
       if (param->read.status != ESP_GATT_OK) {
         ESP_LOGW(TAG, "Error reading char at handle %d, status=%d", param->read.handle, param->read.status);
         break;
@@ -235,6 +273,9 @@ bool MeshConnection::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
                                      std::string((char *) param->read.value, param->read.value_len).substr(1, 9));
 
           this->request_status();
+          // The normal Telink mesh status request always has priority; the
+          // optional Device Information reads are scheduled from loop().
+          this->mesh_authenticated_ = true;
 
           break;
         } else if (param->read.value[0] == 0xe) {
@@ -260,6 +301,9 @@ bool MeshConnection::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
 }
 
 void MeshConnection::setup_connection() {
+  // Standard GATT Device Information Service. Absent on some AwoX models.
+  this->firmware_revision_char_ = this->get_characteristic(0x180A, 0x2A26);
+  this->hardware_revision_char_ = this->get_characteristic(0x180A, 0x2A27);
   this->notification_char = this->get_characteristic(esp32_ble_tracker::ESPBTUUID::from_raw(uuid_info_service),
                                                      esp32_ble_tracker::ESPBTUUID::from_raw(uuid_notification_char));
   this->command_char = this->get_characteristic(esp32_ble_tracker::ESPBTUUID::from_raw(uuid_info_service),
@@ -324,6 +368,25 @@ void MeshConnection::setup_connection() {
 
   // todo; set connection state and trigger mesh to publish this
   this->mesh_->publish_connected();
+}
+
+void MeshConnection::request_next_revision_() {
+  if (!this->mesh_authenticated_ || !this->connected() ||
+      this->pending_revision_handle_ != 0) return;
+  while (this->next_revision_kind_ < 2) {
+    const uint8_t kind = this->next_revision_kind_++;
+    auto *characteristic = kind == 0 ? this->firmware_revision_char_ : this->hardware_revision_char_;
+    if (characteristic == nullptr) continue;
+    const esp_err_t result = esp_ble_gattc_read_char(
+        this->get_gattc_if(), this->get_conn_id(), characteristic->handle, ESP_GATT_AUTH_REQ_NONE);
+    if (result == ESP_OK) {
+      this->pending_revision_handle_ = characteristic->handle;
+      this->pending_revision_kind_ = kind;
+      this->pending_revision_started_ms_ = esphome::millis();
+      return;
+    }
+    ESP_LOGD(TAG, "Could not start optional BLE revision read: %d", result);
+  }
 }
 
 std::string MeshConnection::combine_name_and_password() const {

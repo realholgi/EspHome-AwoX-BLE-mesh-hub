@@ -91,6 +91,17 @@ class MeshConnection : public esp32_ble_client::BLEClientBase {
   uint32_t last_notification_ms_{0};
   bool has_notification_{false};
 
+  // Optional standard Device Information Service (0x180A) revisions.
+  // A missing characteristic must never interrupt normal AwoX mesh operation.
+  esp32_ble_client::BLECharacteristic *firmware_revision_char_{nullptr};
+  esp32_ble_client::BLECharacteristic *hardware_revision_char_{nullptr};
+  bool mesh_authenticated_{false};
+  uint8_t next_revision_kind_{0};  // 0: firmware (0x2A26), 1: hardware (0x2A27)
+  uint16_t pending_revision_handle_{0};
+  uint8_t pending_revision_kind_{0};
+  uint32_t pending_revision_started_ms_{0};
+  void request_next_revision_();
+
   esp32_ble_client::BLECharacteristic *notification_char{nullptr};
   esp32_ble_client::BLECharacteristic *command_char{nullptr};
   esp32_ble_client::BLECharacteristic *pair_char{nullptr};
