@@ -57,21 +57,19 @@ jobs:
           # AwoX code, not a moving GitHub branch. AXP192 remains the user fork.
           display = Path("sample-config/m5stickcplus-gateway-display.yaml").read_text()
           display_upstream = (
-              "  - source:\\n"
-              "      type: git\\n"
-              "      url: https://github.com/realholgi/EspHome-AwoX-BLE-mesh-hub\\n"
-              "      ref: main\\n"
-              "    components: [awox_mesh]\\n"
-              "    refresh: 1d\\n"
+              "  - source:\n"
+              "      type: git\n"
+              "      url: https://github.com/realholgi/EspHome-AwoX-BLE-mesh-hub\n"
+              "      ref: main\n"
+              "    components: [awox_mesh]\n"
+              "    refresh: 1d\n"
           )
           display_local = (
-              "  - source:\\n"
-              "      type: local\\n"
-              "      path: components\\n"
-              "    components: [awox_mesh]\\n"
+              "  - source:\n"
+              "      type: local\n"
+              "      path: components\n"
+              "    components: [awox_mesh]\n"
           )
-          display_upstream = display_upstream.replace("\\\\n", "\\n")
-          display_local = display_local.replace("\\\\n", "\\n")
           assert display.count(display_upstream) == 1, "Expected display fork reference exactly once"
           Path("ci-m5stick-display.yaml").write_text(display.replace(display_upstream, display_local))
           Path("secrets.yaml").write_text(
