@@ -218,5 +218,13 @@ class ConnectionRegressions(unittest.TestCase):
         self.assertNotIn("request_device_version(", section)
 
 
+    def test_m5stick_three_screen_and_fault_led(self):
+        config = (ROOT / 'sample-config/m5stickcplus-gateway-display.yaml').read_text()
+        self.assertIn('id(gateway_wifi_rssi).state', config)
+        self.assertIn('id(gateway_uptime).state', config)
+        self.assertIn('st.lamp_firmware', config)
+        self.assertIn('number: GPIO10', config)
+        self.assertIn('delay: 150ms', config)
+
 if __name__ == "__main__":
     unittest.main()
