@@ -980,3 +980,36 @@ entities. The new sensors appear after MQTT discovery runs, provided MQTT
 discovery is enabled. If you use `discovery_retain: false`, ensure Home
 Assistant is online during initial discovery or restart the gateway after
 Home Assistant reconnects.
+
+## M5StickC Plus local status display
+
+The [two-page M5StickC Plus example](sample-config/m5stickcplus-gateway-display.yaml)
+uses ESPHome 2026.10.2's `mipi_spi` driver with the known working
+M5StickC Plus SPI pins: CLK GPIO13, MOSI GPIO15, CS GPIO5,
+DC GPIO23, reset GPIO18 and 270-degree rotation. It uses the `T-DISPLAY`
+135x240 panel geometry/offsets; the pin overrides are essential.
+
+- **Page 1 (overview)**: AwoX gateway connection, EGLO panel status,
+  RSSI (last advertisement), online mesh devices, last notification age
+  and battery percentage.
+- **Page 2 (diagnostics)**: connection attempts, disconnects, failed
+  attempts, GATT disconnect reason, pending commands, write failures,
+  dropped commands, RSSI and free heap.
+- **Button A (GPIO37)**: wake the display via the AXP192 switch.
+- **Button B (GPIO39)**: switch between the two pages and wake the display.
+- **Power behavior**: AXP192 retains the display-brightness control and
+  its existing `auto_off: 5min`. Only the backlight rail is switched;
+  Wi-Fi, BLE mesh control and MQTT continue to run.
+
+The display takes a read-only snapshot directly from `awox_mesh` with no
+new BLE requests or MQTT loopback. A partial 8-bit framebuffer (25%) keeps
+the memory requirement lower than a full 16-bit framebuffer, and the
+display redraw interval is three seconds. The example is intended for
+one AwoX mesh lamp (`max_connections: 1`). Check ESPHome compilation
+before flashing, and verify heap and BLE uptime on physical hardware.
+
+The example includes the AXP192 component from
+`realholgi/esphome-axp192`; if you already have a working YAML, copy
+only its `spi`, `font`, `globals`, `display` and GPIO39 button sections,
+and assign `id: awox_gateway` to your existing `awox_mesh` component.
+Do not duplicate existing AXP192 sensors, GPIO37 button or `i2c` setup.
