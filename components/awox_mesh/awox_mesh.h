@@ -92,11 +92,9 @@ class AwoxMesh : public esp32_ble_tracker::ESPBTDeviceListener, public Component
 
  public:
   void set_mesh_name(const std::string &mesh_name) {
-    ESP_LOGI("awox.mesh", "name: %s", mesh_name.c_str());
     this->mesh_name = mesh_name;
   }
   void set_mesh_password(const std::string &mesh_password) {
-    ESP_LOGI("awox.mesh", "password: %s", mesh_password.c_str());
     this->mesh_password = mesh_password;
   }
   void register_device(int device_type, int product_id, const char *name, const char *model, const char *manufacturer,

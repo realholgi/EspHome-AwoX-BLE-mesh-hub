@@ -181,9 +181,6 @@ bool MeshConnection::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
           this->generate_session_key(this->random_key,
                                      std::string((char *) param->read.value, param->read.value_len).substr(1, 9));
 
-          ESP_LOGI(TAG, "[%u] [%s] session key %s", this->get_conn_id(), this->address_str_,
-                   string_as_hex_string(this->session_key).c_str());
-
           this->request_status();
 
           break;
@@ -277,7 +274,6 @@ void MeshConnection::setup_connection() {
 
 std::string MeshConnection::combine_name_and_password() const {
   std::string data;
-  ESP_LOGD(TAG, "combine mesh name + password: %s:%s", this->mesh_name.c_str(), this->mesh_password.c_str());
   std::string mesh_name = this->mesh_name;
   std::string mesh_password = this->mesh_password;
   mesh_name.append(16 - mesh_name.size(), 0);
