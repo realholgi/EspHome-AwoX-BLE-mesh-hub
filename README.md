@@ -1013,3 +1013,31 @@ The example includes the AXP192 component from
 only its `spi`, `font`, `globals`, `display` and GPIO39 button sections,
 and assign `id: awox_gateway` to your existing `awox_mesh` component.
 Do not duplicate existing AXP192 sensors, GPIO37 button or `i2c` setup.
+
+
+## Optional firmware and hardware revisions on AwoX devices
+
+The gateway attempts to read the standard BLE Device Information Service
+(`0x180A`) firmware revision (`0x2A26`) and hardware revision (`0x2A27`)
+**after successful AwoX mesh authentication**. Each characteristic is read
+at most once per successful BLE session. Neither operation triggers a second
+BLE connection or requires extra `awox_mesh:` YAML fields.
+
+If the lamp implements either standard GATT characteristic and returns a
+printable, valid revision string, the result is cached under the lamp's BLE
+MAC address and published as `device.sw_version` and/or `device.hw_version`
+in its existing Home Assistant MQTT discovery entity. The existing discovery
+identity and device association remain unchanged. Once a revision arrives,
+the gateway republishes the device's discovery configuration; a late mesh
+identity resolution is also supported.
+
+Some AwoX/EGLO devices might not expose these GATT characteristics. In that
+case the version fields are omitted rather than guessed; normal mesh control
+continues. The feature **reads revision strings only**, not a firmware image,
+and does not perform an OTA update. Check the ESPHome logs for
+`Read firmware revision:` or `Read hardware revision:` and view the
+EGLO panel's *Device info* in Home Assistant.
+
+The version cache is in RAM and is repopulated on the next successful BLE
+session after a gateway reboot. The gateway's own ESPHome build version is
+not used as the panel's firmware version.
