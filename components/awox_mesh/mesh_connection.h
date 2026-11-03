@@ -79,6 +79,14 @@ class MeshConnection : public esp32_ble_client::BLEClientBase {
 
   FoundDevice *found_device{nullptr};
 
+  // Per-slot diagnostics, kept across reconnects until the next reboot.
+  uint32_t connection_attempts_{0};
+  uint32_t connection_failures_{0};
+  uint32_t disconnect_count_{0};
+  int last_disconnect_reason_{-1};
+  int last_rssi_dbm_{-127};
+  bool established_session_{false};
+
   esp32_ble_client::BLECharacteristic *notification_char{nullptr};
   esp32_ble_client::BLECharacteristic *command_char{nullptr};
   esp32_ble_client::BLECharacteristic *pair_char{nullptr};
@@ -153,6 +161,12 @@ class MeshConnection : public esp32_ble_client::BLEClientBase {
   void connect_to(FoundDevice *found_device);
 
   int mesh_id();
+
+  uint32_t connection_attempts() const { return this->connection_attempts_; }
+  uint32_t connection_failures() const { return this->connection_failures_; }
+  uint32_t disconnect_count() const { return this->disconnect_count_; }
+  int last_disconnect_reason() const { return this->last_disconnect_reason_; }
+  int last_rssi_dbm() const;
 
   bool mesh_id_linked(int mesh_id);
 

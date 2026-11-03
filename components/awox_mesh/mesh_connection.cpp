@@ -50,6 +50,9 @@ static std::string encrypt(std::string key, std::string data) {
 static int get_product_code(unsigned char part1, unsigned char part2) { return int(part2); }
 
 void MeshConnection::connect_to(FoundDevice *found_device) {
+  ++this->connection_attempts_;
+  this->established_session_ = false;
+  this->last_rssi_dbm_ = found_device->rssi;
   this->set_address(found_device->device.address_uint64());
   this->set_state(esp32_ble_tracker::ClientState::IDLE);
   this->found_device = found_device;
@@ -70,11 +73,18 @@ void MeshConnection::set_address(uint64_t address) {
   if (address == this->get_address()) return;
 
   if (this->found_device) {
+    if (this->found_device->rssi >= -127 && this->found_device->rssi <= 0)
+      this->last_rssi_dbm_ = this->found_device->rssi;
     this->found_device->connected = false;
     this->found_device = nullptr;
   }
 
   if (address == 0) {
+    if (this->established_session_)
+      ++this->disconnect_count_;
+    else
+      ++this->connection_failures_;
+    this->established_session_ = false;
     // Commands queued for a previous mesh connection must not be sent
     // after this slot is assigned to a different device.
     this->command_queue.clear();
@@ -137,6 +147,17 @@ bool MeshConnection::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
   ESP_LOGVV(TAG, "[%u] [%s] gattc_event_handler: event=%d gattc_if=%d", this->connection_index_,
             this->address_str_, event, gattc_if);
 
+  // Save the reason BEFORE the base handler can clear the assigned MAC.
+  // HCI-layer errors (for example 0x3E during establishment) may not be
+  // delivered as an ESP_GATTC_DISCONNECT_EVT, so they are not invented here.
+  if (param != nullptr && this->get_address() != 0) {
+    if (event == ESP_GATTC_DISCONNECT_EVT && param->disconnect.conn_id == this->get_conn_id()) {
+      this->last_disconnect_reason_ = param->disconnect.reason;
+    } else if (event == ESP_GATTC_CLOSE_EVT && param->close.conn_id == this->get_conn_id()) {
+      this->last_disconnect_reason_ = param->close.reason;
+    }
+  }
+
   if (!esp32_ble_client::BLEClientBase::gattc_event_handler(event, gattc_if, param))
     return false;
 
@@ -155,6 +176,7 @@ bool MeshConnection::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
     case ESP_GATTC_OPEN_EVT: {
       if (this->state() == esp32_ble_tracker::ClientState::ESTABLISHED) {
         ESP_LOGI(TAG, "Connected....");
+        this->established_session_ = true;
         this->setup_connection();
       }
       break;
@@ -540,6 +562,15 @@ void MeshConnection::handle_packet(std::string &packet) {
   if (online_changed) {
     this->mesh_->publish_availability(device, true);
   }
+}
+
+int MeshConnection::last_rssi_dbm() const {
+  // The discovered-device RSSI is refreshed by BLE advertisements; preserve
+  // the last valid sample after the connection reservation is released.
+  if (this->found_device != nullptr && this->found_device->rssi >= -127 &&
+      this->found_device->rssi <= 0)
+    return this->found_device->rssi;
+  return this->last_rssi_dbm_;
 }
 
 int MeshConnection::mesh_id() {

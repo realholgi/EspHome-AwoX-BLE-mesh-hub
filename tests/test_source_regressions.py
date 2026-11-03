@@ -114,6 +114,19 @@ class ConnectionRegressions(unittest.TestCase):
         self.assertIn("if (connection->connected())", call)
         self.assertNotIn("ESP_LOGI(TAG, \"No active connection", call)
 
+    def test_connection_diagnostics_survive_slot_reuse(self):
+        for member in ("connection_attempts_", "connection_failures_", "disconnect_count_",
+                       "last_disconnect_reason_", "last_rssi_dbm_", "established_session_"):
+            self.assertIn(member, CONN_H)
+        self.assertIn("++this->connection_attempts_", CONN_CPP)
+        self.assertIn("++this->disconnect_count_", CONN_CPP)
+        self.assertIn("++this->connection_failures_", CONN_CPP)
+        self.assertIn("this->last_disconnect_reason_ = param->disconnect.reason", CONN_CPP)
+        self.assertIn("this->last_rssi_dbm_ = found_device->rssi", CONN_CPP)
+        self.assertIn("this->established_session_ = true", CONN_CPP)
+        # No change to the same-MAC guard that previously caused a crash.
+        self.assertIn("if (address == this->get_address()) return;", CONN_CPP)
+
 
 if __name__ == "__main__":
     unittest.main()
