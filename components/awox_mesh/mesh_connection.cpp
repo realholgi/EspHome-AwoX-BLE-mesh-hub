@@ -63,6 +63,12 @@ void MeshConnection::connect_to(FoundDevice *found_device) {
 }
 
 void MeshConnection::set_address(uint64_t address) {
+  // ESPHome BLEClientBase::parse_device() calls set_address() a second time
+  // with the SAME MAC. Releasing found_device in that case causes
+  // connect_to() to dereference a null pointer after parse_device() returns.
+  // Only release the reservation when the slot actually changes target.
+  if (address == this->get_address()) return;
+
   if (this->found_device) {
     this->found_device->connected = false;
     this->found_device = nullptr;

@@ -29,6 +29,23 @@ class ConnectionRegressions(unittest.TestCase):
         self.assertIn("this->found_device->connected = false;", CONN_CPP)
         self.assertIn("this->found_device = nullptr;", CONN_CPP)
 
+    def test_same_mac_does_not_clear_found_device(self):
+        # In ESPHome 2026.10, BLEClientBase::parse_device calls the virtual
+        # set_address() with the existing MAC. We must preserve ownership.
+        method = CONN_CPP.split("void MeshConnection::set_address(uint64_t address) {", 1)[1].split(
+            "void MeshConnection::loop()", 1
+        )[0]
+        self.assertIn("if (address == this->get_address()) return;", method)
+        self.assertLess(
+            method.index("if (address == this->get_address()) return;"),
+            method.index("this->found_device = nullptr;"),
+        )
+        connect = CONN_CPP.split("void MeshConnection::connect_to(FoundDevice *found_device) {", 1)[1].split(
+            "void MeshConnection::set_address", 1
+        )[0]
+        self.assertIn("this->parse_device(found_device->device);", connect)
+        self.assertIn("this->found_device->mesh_id", connect)
+
     def test_overlapping_mesh_ids_check_all_pairs(self):
         self.assertIn("for (int j = i + 1; j < connections_count; ++j)", MESH_CPP)
     def test_command_queue_has_limits_and_retries(self):
