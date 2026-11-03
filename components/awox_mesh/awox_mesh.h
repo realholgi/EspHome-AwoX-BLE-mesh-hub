@@ -38,6 +38,26 @@ struct FoundDevice {
   int mesh_id{0};
 };
 
+// Non-owning, read-only display view. No MQTT round trip or BLE polling.
+struct GatewayDisplayStatus {
+  bool connected{false};
+  bool lamp_known{false};
+  bool lamp_online{false};
+  bool lamp_on{false};
+  bool rssi_valid{false};
+  int rssi_dbm{0};
+  uint32_t attempts{0};
+  uint32_t disconnects{0};
+  uint32_t failed_connections{0};
+  int disconnect_reason{-1};
+  bool notification_seen{false};
+  uint32_t notification_age_s{0};
+  uint32_t queued_commands{0};
+  uint32_t failed_writes{0};
+  uint32_t dropped_commands{0};
+  uint32_t online_devices{0};
+};
+
 class AwoxMesh : public esp32_ble_tracker::ESPBTDeviceListener, public Component {
   uint32_t start;
   uint32_t device_info_request_interval_ms = 5000;
@@ -146,6 +166,8 @@ class AwoxMesh : public esp32_ble_tracker::ESPBTDeviceListener, public Component
   void publish_state(MeshDestination *mesh_destination);
 
   void publish_connected();
+
+  GatewayDisplayStatus get_display_status() const;
 
   void set_power(int dest, bool state);
   void set_color(int dest, int red, int green, int blue);

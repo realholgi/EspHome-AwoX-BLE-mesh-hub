@@ -420,6 +420,48 @@ Group *AwoxMesh::get_group(int dest, Device *device) {
   return group;
 }
 
+GatewayDisplayStatus AwoxMesh::get_display_status() const {
+  GatewayDisplayStatus status{};
+  const uint32_t now = esphome::millis();
+  // Display the first usable BLE link or, while disconnected, the first slot.
+  MeshConnection *selected = nullptr;
+  for (auto *connection : this->connections_) {
+    if (selected == nullptr || (!selected->connected() && connection->connected())) {
+      selected = connection;
+    }
+    if (connection->connected()) {
+      status.connected = true;
+    }
+  }
+  if (selected != nullptr) {
+    status.attempts = selected->connection_attempts();
+    status.disconnects = selected->disconnect_count();
+    status.failed_connections = selected->connection_failures();
+    status.disconnect_reason = selected->last_disconnect_reason();
+    status.queued_commands = static_cast<uint32_t>(selected->queued_commands());
+    status.failed_writes = selected->failed_command_writes();
+    status.dropped_commands = selected->dropped_commands();
+    status.notification_seen = selected->has_notification();
+    if (status.notification_seen)
+      status.notification_age_s = selected->ms_since_notification(now) / 1000U;
+    const int rssi = selected->last_rssi_dbm();
+    status.rssi_valid = rssi >= -100 && rssi <= 0;
+    if (status.rssi_valid) status.rssi_dbm = rssi;
+  }
+  for (auto *device : this->mesh_devices_) {
+    if (device->online) ++status.online_devices;
+    // Show the first discovered lamp; for a single-device gateway that is
+    // the configured EGLO panel. No new mesh requests are generated.
+    if (!status.lamp_known && device->device_info != nullptr &&
+        device->device_info->has_feature(FEATURE_LIGHT_MODE)) {
+      status.lamp_known = true;
+      status.lamp_online = device->online;
+      status.lamp_on = device->state;
+    }
+  }
+  return status;
+}
+
 void AwoxMesh::publish_connected() {
   this->has_active_connection = false;
   int active_connections = 0;

@@ -158,6 +158,19 @@ class ConnectionRegressions(unittest.TestCase):
         self.assertIn('"active-connections"', mqtt)
         self.assertIn('"online-devices"', mqtt)
 
+    def test_display_snapshot_is_read_only_and_bounded(self):
+        self.assertIn("struct GatewayDisplayStatus", MESH_H)
+        self.assertIn("GatewayDisplayStatus get_display_status() const;", MESH_H)
+        body = MESH_CPP.split("GatewayDisplayStatus AwoxMesh::get_display_status() const {", 1)[1].split(
+            "void AwoxMesh::publish_connected()", 1
+        )[0]
+        self.assertIn("selected->last_rssi_dbm()", body)
+        self.assertIn("selected->ms_since_notification(now)", body)
+        self.assertIn("device->device_info->has_feature(FEATURE_LIGHT_MODE)", body)
+        self.assertNotIn("request_status_update(", body)
+        self.assertNotIn("call_connection(", body)
+        self.assertNotIn("global_mqtt_client", body)
+
 
 if __name__ == "__main__":
     unittest.main()
