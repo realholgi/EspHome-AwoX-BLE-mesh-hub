@@ -147,6 +147,17 @@ class ConnectionRegressions(unittest.TestCase):
         self.assertIn("this->last_diagnostic_publish_ms_ = now", mqtt)
         self.assertIn("last_diagnostic_publish_ms_", header)
 
+    def test_home_assistant_diagnostic_discovery_uses_existing_topic(self):
+        mqtt = (ROOT / "components/awox_mesh/awox_mesh_mqtt.cpp").read_text()
+        self.assertIn("static void publish_diagnostic_sensor(", mqtt)
+        self.assertIn('root[MQTT_ENTITY_CATEGORY] = "diagnostic"', mqtt)
+        self.assertIn('root[MQTT_STATE_TOPIC] = global_mqtt_client->get_topic_prefix() + "/connection_status"', mqtt)
+        for slug in ("-rssi", "-attempts", "-failures", "-disconnects", "-reason",
+                     "-notification-age", "-queue", "-write-errors", "-dropped"):
+            self.assertIn('slot + "' + slug + '"', mqtt)
+        self.assertIn('"active-connections"', mqtt)
+        self.assertIn('"online-devices"', mqtt)
+
 
 if __name__ == "__main__":
     unittest.main()

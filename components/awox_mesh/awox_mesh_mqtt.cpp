@@ -230,11 +230,79 @@ void AwoxMeshMqtt::publish_state(MeshDestination *mesh_destination) {
   if (published) this->last_published_state_[mesh_destination->dest()] = mesh_destination->state_as_char();
 }
 
+// All diagnostic entities reuse the single connection_status payload. Discovery
+// is retained according to the normal ESPHome MQTT discovery configuration.
+static void publish_diagnostic_sensor(const MQTTDiscoveryInfo &discovery, const std::string &slug,
+                                      const std::string &name, const std::string &template_value,
+                                      const std::string &icon, const char *unit = nullptr,
+                                      const char *state_class = nullptr, bool enabled = false) {
+  const std::string node = str_sanitize(App.get_name());
+  global_mqtt_client->publish_json(
+      discovery.prefix + "/sensor/" + node + "/" + slug + "/config",
+      [=](JsonObject root) {
+        root[MQTT_NAME] = name;
+        root[MQTT_UNIQUE_ID] = "awox-" + get_mac_address() + "-" + slug;
+        root[MQTT_ENTITY_CATEGORY] = "diagnostic";
+        root[MQTT_ICON] = icon;
+        root[MQTT_ENABLED_BY_DEFAULT] = enabled;
+        root[MQTT_STATE_TOPIC] = global_mqtt_client->get_topic_prefix() + "/connection_status";
+        root[MQTT_AVAILABILITY_TOPIC] = global_mqtt_client->get_topic_prefix() + "/status";
+        root[MQTT_VALUE_TEMPLATE] = template_value;
+        if (unit != nullptr) root["unit_of_measurement"] = unit;
+        if (state_class != nullptr) root["state_class"] = state_class;
+        JsonObject device = root[MQTT_DEVICE].to<JsonObject>();
+        device[MQTT_DEVICE_IDENTIFIERS] = get_mac_address();
+      },
+      0, discovery.retain);
+}
+
 void AwoxMeshMqtt::publish_connection_sensor_discovery(const std::vector<MeshConnection *> &connections) {
   const MQTTDiscoveryInfo &discovery_info = global_mqtt_client->get_discovery_info();
   const std::string sanitized_name = str_sanitize(App.get_name());
 
+  publish_diagnostic_sensor(discovery_info, "active-connections", "AwoX active BLE connections",
+                            "{{ value_json.active_connections }}", "mdi:connection", nullptr, "measurement", true);
+  publish_diagnostic_sensor(discovery_info, "online-devices", "AwoX online mesh devices",
+                            "{{ value_json.online_devices }}", "mdi:lightbulb-multiple-outline",
+                            nullptr, "measurement", true);
+
   for (int i = 0; i < connections.size(); i++) {
+    const std::string slot = "connection-" + std::to_string(i);
+    const std::string field = "value_json.connection_" + std::to_string(i);
+    publish_diagnostic_sensor(discovery_info, slot + "-rssi", "Connection " + std::to_string(i) + " RSSI",
+                              "{{ " + field + ".rssi }}", "mdi:signal", "dBm", "measurement", true);
+    publish_diagnostic_sensor(discovery_info, slot + "-attempts",
+                              "Connection " + std::to_string(i) + " attempts",
+                              "{{ " + field + ".connection_attempts }}", "mdi:counter",
+                              nullptr, "total_increasing", true);
+    publish_diagnostic_sensor(discovery_info, slot + "-failures",
+                              "Connection " + std::to_string(i) + " failed attempts",
+                              "{{ " + field + ".connection_failures }}", "mdi:alert-circle-outline",
+                              nullptr, "total_increasing");
+    publish_diagnostic_sensor(discovery_info, slot + "-disconnects",
+                              "Connection " + std::to_string(i) + " disconnects",
+                              "{{ " + field + ".disconnect_count }}", "mdi:link-off",
+                              nullptr, "total_increasing", true);
+    publish_diagnostic_sensor(discovery_info, slot + "-reason",
+                              "Connection " + std::to_string(i) + " last disconnect reason",
+                              "{{ " + field + ".last_disconnect_reason }}", "mdi:information-outline",
+                              nullptr, nullptr, true);
+    publish_diagnostic_sensor(discovery_info, slot + "-notification-age",
+                              "Connection " + std::to_string(i) + " last notification age",
+                              "{{ " + field + ".last_notification_age_s }}", "mdi:timer-outline",
+                              "s", "measurement", true);
+    publish_diagnostic_sensor(discovery_info, slot + "-queue",
+                              "Connection " + std::to_string(i) + " queued commands",
+                              "{{ " + field + ".queue_length }}", "mdi:format-list-numbered",
+                              nullptr, "measurement");
+    publish_diagnostic_sensor(discovery_info, slot + "-write-errors",
+                              "Connection " + std::to_string(i) + " failed command writes",
+                              "{{ " + field + ".failed_command_writes }}", "mdi:alert-circle-outline",
+                              nullptr, "total_increasing");
+    publish_diagnostic_sensor(discovery_info, slot + "-dropped",
+                              "Connection " + std::to_string(i) + " dropped commands",
+                              "{{ " + field + ".dropped_commands }}", "mdi:delete-alert-outline",
+                              nullptr, "total_increasing");
     global_mqtt_client->publish_json(
         discovery_info.prefix + "/sensor/" + sanitized_name + "/connection-" + std::to_string(i) + "-devices/config",
         [this, i, discovery_info](JsonObject root) {
