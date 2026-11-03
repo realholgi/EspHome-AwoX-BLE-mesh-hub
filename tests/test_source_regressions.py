@@ -208,6 +208,15 @@ class ConnectionRegressions(unittest.TestCase):
         mqtt = (ROOT / "components/awox_mesh/awox_mesh_mqtt.cpp").read_text()
         self.assertIn("char reason[12];", mqtt)
 
+    def test_display_snapshot_includes_cached_panel_firmware(self):
+        self.assertIn("const char *lamp_firmware{nullptr};", MESH_H)
+        section = MESH_CPP.split("GatewayDisplayStatus AwoxMesh::get_display_status() const {", 1)[1].split(
+            "void AwoxMesh::publish_connected()", 1
+        )[0]
+        self.assertIn("device->firmware_revision.c_str()", section)
+        self.assertIn("status.lamp_firmware =", section)
+        self.assertNotIn("request_device_version(", section)
+
 
 if __name__ == "__main__":
     unittest.main()

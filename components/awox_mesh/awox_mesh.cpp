@@ -457,6 +457,9 @@ GatewayDisplayStatus AwoxMesh::get_display_status() const {
       status.lamp_known = true;
       status.lamp_online = device->online;
       status.lamp_on = device->state;
+      if (!device->firmware_revision.empty()) {
+        status.lamp_firmware = device->firmware_revision.c_str();
+      }
     }
   }
   return status;

@@ -49,6 +49,9 @@ struct GatewayDisplayStatus {
   bool lamp_known{false};
   bool lamp_online{false};
   bool lamp_on{false};
+  // Read-only pointer to the cached revision of the first recognized lamp.
+  // Its Device owns the string; null means the version is not known yet.
+  const char *lamp_firmware{nullptr};
   bool rssi_valid{false};
   int rssi_dbm{0};
   uint32_t attempts{0};
