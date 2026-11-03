@@ -92,6 +92,28 @@ class ConnectionRegressions(unittest.TestCase):
         self.assertIn("this->mesh_->refresh_mqtt_discovery()", mqtt)
         self.assertIn("if (status_published)", mqtt)
 
+    def test_device_info_retry_is_bounded_during_disconnection(self):
+        mesh_loop = MESH_CPP.split("void AwoxMesh::loop() {", 1)[1].split(
+            "void AwoxMesh::disconnect_connections_with_overlapping_mesh_ids()", 1
+        )[0]
+        self.assertIn("now - device->device_info_requested >= this->device_info_request_interval_ms", mesh_loop)
+
+        request = MESH_CPP.split("void AwoxMesh::request_device_info(Device *device) {", 1)[1].split(
+            "void AwoxMesh::set_power(", 1
+        )[0]
+        self.assertLess(
+            request.index("device->device_info_requested = esphome::millis();"),
+            request.index("this->call_connection("),
+        )
+
+    def test_mesh_requests_are_only_queued_on_established_ble_connections(self):
+        call = MESH_CPP.split("void AwoxMesh::call_connection(", 1)[1].split(
+            "void AwoxMesh::request_device_info(", 1
+        )[0]
+        self.assertIn("connection->connected() && connection->mesh_id_linked(dest)", call)
+        self.assertIn("if (connection->connected())", call)
+        self.assertNotIn("ESP_LOGI(TAG, \"No active connection", call)
+
 
 if __name__ == "__main__":
     unittest.main()

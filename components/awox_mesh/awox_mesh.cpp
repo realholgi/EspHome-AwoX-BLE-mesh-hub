@@ -157,8 +157,9 @@ void AwoxMesh::loop() {
   }
 
   for (auto *device : this->mesh_devices_) {
+    // Use wrap-safe elapsed time and never retry every loop while BLE is offline.
     if (!device->send_discovery && device->device_info_requested > 0 &&
-        device->device_info_requested < esphome::millis() - this->device_info_request_interval_ms) {
+        now - device->device_info_requested >= this->device_info_request_interval_ms) {
       ESP_LOGD(TAG, "Request info again for %u", device->mesh_id);
       this->request_device_info(device);
     }
@@ -612,26 +613,33 @@ void AwoxMesh::refresh_mqtt_discovery() {
 void AwoxMesh::call_connection(int dest, std::function<void(MeshConnection *)> &&callback) {
   ESP_LOGD(TAG, "Call connection for %d", dest);
   for (auto *connection : this->connections_) {
-    if (connection->get_address() > 0 && connection->mesh_id_linked(dest)) {
+    // A reserved MAC is not yet a usable GATT connection.
+    if (connection->connected() && connection->mesh_id_linked(dest)) {
       ESP_LOGD(TAG, "Found %s as connection", connection->address_str());
       callback(connection);
-
-      // for now we stop on first
       return;
     }
   }
 
-  ESP_LOGI(TAG, "No active connection for %d, we trigger message on all could be also a group", dest);
+  // Unknown mesh destinations may be reachable over any established link.
+  bool dispatched = false;
   for (auto *connection : this->connections_) {
     if (connection->connected()) {
       callback(connection);
+      dispatched = true;
     }
+  }
+  if (!dispatched) {
+    ESP_LOGD(TAG, "No established BLE connection for mesh destination %d", dest);
   }
 }
 
 void AwoxMesh::request_device_info(Device *device) {
+  // Timestamp the ATTEMPT, even if no BLE link exists yet. Previously the
+  // timestamp was updated only inside the callback, triggering a busy-loop
+  // of request retries and INFO logs while a connection was being established.
+  device->device_info_requested = esphome::millis();
   this->call_connection(device->mesh_id, [device](MeshConnection *connection) {
-    device->device_info_requested = esphome::millis();
     connection->request_device_info(device);
     connection->request_group_info(device);
     // connection->request_device_version(device->mesh_id);
