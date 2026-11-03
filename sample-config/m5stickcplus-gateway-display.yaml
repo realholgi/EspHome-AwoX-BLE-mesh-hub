@@ -175,11 +175,11 @@ display:
         else
           it.print(153, 48, id(font_small), subdued, "RSSI --");
         it.line(7, 77, 233, 77, Color(54, 73, 88));
-        it.printf(7, 84, id(font_small), fg, "BLE: %s  Mesh: %u",
-                  st.connected ? "UP" : "DOWN", st.online_devices);
+        it.printf(7, 84, id(font_small), fg, "BLE: %s  Mesh: %lu",
+                  st.connected ? "UP" : "DOWN", static_cast<unsigned long>(st.online_devices));
         if (st.notification_seen)
-          it.printf(7, 102, id(font_small), fg, "Last packet: %us",
-                    st.notification_age_s);
+          it.printf(7, 102, id(font_small), fg, "Last packet: %lus",
+                    static_cast<unsigned long>(st.notification_age_s));
         else
           it.print(7, 102, id(font_small), subdued, "Last packet: --");
         if (!isnan(id(battery_level).state))
@@ -188,17 +188,17 @@ display:
       } else {
         it.print(7, 4, id(font_small), subdued, "BLE DIAGNOSTICS");
         it.filled_circle(226, 12, 5, st.connected ? ok : bad);
-        it.printf(7, 25, id(font_small), fg, "Attempts: %u", st.attempts);
-        it.printf(125, 25, id(font_small), fg, "Disconnects: %u", st.disconnects);
-        it.printf(7, 44, id(font_small), fg, "Failed: %u", st.failed_connections);
+        it.printf(7, 25, id(font_small), fg, "Attempts: %lu", static_cast<unsigned long>(st.attempts));
+        it.printf(125, 25, id(font_small), fg, "Disconnects: %lu", static_cast<unsigned long>(st.disconnects));
+        it.printf(7, 44, id(font_small), fg, "Failed: %lu", static_cast<unsigned long>(st.failed_connections));
         if (st.disconnect_reason >= 0)
           it.printf(125, 44, id(font_small), warn, "Reason: 0x%02X",
                     st.disconnect_reason);
         else
           it.print(125, 44, id(font_small), subdued, "Reason: --");
-        it.printf(7, 63, id(font_small), fg, "Queue: %u", st.queued_commands);
-        it.printf(125, 63, id(font_small), fg, "Write err: %u", st.failed_writes);
-        it.printf(7, 82, id(font_small), fg, "Dropped: %u", st.dropped_commands);
+        it.printf(7, 63, id(font_small), fg, "Queue: %lu", static_cast<unsigned long>(st.queued_commands));
+        it.printf(125, 63, id(font_small), fg, "Write err: %lu", static_cast<unsigned long>(st.failed_writes));
+        it.printf(7, 82, id(font_small), fg, "Dropped: %lu", static_cast<unsigned long>(st.dropped_commands));
         if (st.rssi_valid)
           it.printf(125, 82, id(font_small), fg, "RSSI: %d", st.rssi_dbm);
         it.line(7, 105, 233, 105, Color(54, 73, 88));

@@ -196,6 +196,18 @@ class ConnectionRegressions(unittest.TestCase):
         self.assertIn("device->send_discovery = false;", changed)
         self.assertIn("this->send_discovery(device);", changed)
 
+    def test_display_format_arguments_match_32_bit_counters(self):
+        display = (ROOT / "sample-config/m5stickcplus-gateway-display.yaml").read_text()
+        for field in ("online_devices", "notification_age_s", "attempts",
+                      "disconnects", "failed_connections", "queued_commands",
+                      "failed_writes", "dropped_commands"):
+            self.assertIn("static_cast<unsigned long>(st." + field + ")", display)
+        self.assertNotIn("%u", display)
+
+    def test_gatt_disconnect_reason_buffer_fits_full_hex_integer(self):
+        mqtt = (ROOT / "components/awox_mesh/awox_mesh_mqtt.cpp").read_text()
+        self.assertIn("char reason[12];", mqtt)
+
 
 if __name__ == "__main__":
     unittest.main()

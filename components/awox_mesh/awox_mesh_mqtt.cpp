@@ -117,7 +117,7 @@ void AwoxMeshMqtt::publish_connected(int active_connections, int online_devices,
           if (rssi >= -127 && rssi <= 0) connection["rssi"] = rssi;
           else connection["rssi"] = nullptr;
           if (connections[i]->last_disconnect_reason() >= 0) {
-            char reason[8];
+            char reason[12];
             snprintf(reason, sizeof(reason), "0x%02X", connections[i]->last_disconnect_reason());
             connection["last_disconnect_reason"] = reason;
           } else {
