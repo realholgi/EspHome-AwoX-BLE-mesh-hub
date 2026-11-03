@@ -934,3 +934,49 @@ To test this fork in ESPHome, replace the upstream Git source with
 `https://github.com/realholgi/EspHome-AwoX-BLE-mesh-hub` and reference
 `main` or a specific tested commit. Keep `max_connections: 1` on
 single-device deployments until the multi-slot fix is validated on hardware.
+
+## Home Assistant BLE diagnostics (fork)
+
+The fork publishes per-connection diagnostics through MQTT discovery. All
+diagnostic entities share the **existing** `<mqtt_topic_prefix>/connection_status`
+JSON payload; they do not open new BLE connections or subscribe to new mesh
+devices.
+
+The following entities are **enabled by default**:
+
+| Sensor | Meaning |
+| --- | --- |
+| AwoX active BLE connections | Number of established BLE client slots |
+| AwoX online mesh devices | Unique mesh IDs reachable through active slots |
+| Connection 0 RSSI | Last observed BLE advertisement RSSI in dBm |
+| Connection 0 attempts | Connection attempts since the last ESP reboot |
+| Connection 0 disconnects | Completed GATT sessions that ended |
+| Connection 0 last disconnect reason | Last observed GATT reason, e.g. `0x08` |
+| Connection 0 last notification age | Seconds since the last valid-length AwoX notification |
+
+Additional diagnostic entities are available but **disabled by default**:
+failed connection attempts, pending command count, failed command writes and
+dropped commands. Enable them from the MQTT device's entity list in Home
+Assistant as needed.
+
+The diagnostic sensor names contain `Connection 0` for the first slot,
+`Connection 1` for the second, and so on. Counts are reset by ESP reboot.
+The elapsed notification time is unavailable until the first valid-length
+notification arrives. RSSI is the last observed advertisement signal; it is
+**not** a continuous measurement of active-link signal strength. The last
+disconnect reason may be unavailable: low-level HCI failures such as `0x3E`
+do not always produce a GATT disconnect event, and the firmware does not
+fabricate a reason in that case.
+
+To limit MQTT and ESP32 load, the `connection_status` message is updated
+immediately on relevant connection-status changes and periodically about
+every **30 seconds** while connected. The data is therefore not a
+high-frequency BLE telemetry feed. The MQTT diagnostic entity IDs include
+the gateway MAC and connection slot to avoid collisions across gateways.
+
+**For current users:** No new `awox_mesh:` YAML parameters are required.
+Build the firmware from this fork instead of the upstream to get the new
+entities. The new sensors appear after MQTT discovery runs, provided MQTT
+discovery is enabled. If you use `discovery_retain: false`, ensure Home
+Assistant is online during initial discovery or restart the gateway after
+Home Assistant reconnects.
