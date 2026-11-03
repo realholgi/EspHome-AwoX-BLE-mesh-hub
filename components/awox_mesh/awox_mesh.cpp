@@ -624,6 +624,11 @@ void AwoxMesh::set_device_revision(uint64_t mac, bool firmware, const std::strin
   if (device != nullptr) {
     device->firmware_revision = revisions.firmware;
     device->hardware_revision = revisions.hardware;
+    // Device discovery may have been published before the GATT read finished.
+    // Republish the same unique MQTT entity with refreshed device metadata.
+    // A failure leaves the discovery flag clear for a later retry.
+    device->send_discovery = false;
+    this->send_discovery(device);
   }
 }
 

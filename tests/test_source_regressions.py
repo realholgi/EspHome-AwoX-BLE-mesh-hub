@@ -182,6 +182,20 @@ class ConnectionRegressions(unittest.TestCase):
         self.assertIn("this->device_revisions_[mac]", MESH_CPP)
         self.assertIn("this->device_revisions_.find(device->address_uint64())", MESH_CPP)
 
+    def test_revision_metadata_on_panel_not_gateway(self):
+        mqtt = (ROOT / "components/awox_mesh/awox_mesh_mqtt.cpp").read_text()
+        section = mqtt.split("bool AwoxMeshMqtt::send_discovery(Device *device)", 1)[1].split(
+            "void AwoxMeshMqtt::send_group_discovery", 1
+        )[0]
+        self.assertIn('device_info["sw_version"] = device->firmware_revision', section)
+        self.assertIn('device_info["hw_version"] = device->hardware_revision', section)
+        self.assertNotIn('root["sw_version"]', section)
+        changed = MESH_CPP.split("void AwoxMesh::set_device_revision(", 1)[1].split(
+            "void AwoxMesh::send_discovery(", 1
+        )[0]
+        self.assertIn("device->send_discovery = false;", changed)
+        self.assertIn("this->send_discovery(device);", changed)
+
 
 if __name__ == "__main__":
     unittest.main()

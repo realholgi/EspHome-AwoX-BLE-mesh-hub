@@ -509,6 +509,12 @@ bool AwoxMeshMqtt::send_discovery(Device *device) {
           device_info[MQTT_DEVICE_MODEL] = std::string(device->device_info->get_model());
         }
         device_info[MQTT_DEVICE_MANUFACTURER] = device->device_info->get_manufacturer();
+        // These are the firmware/hardware revisions of the *AwoX lamp*, not
+        // the ESPHome firmware running on the gateway.
+        if (!device->firmware_revision.empty())
+          device_info["sw_version"] = device->firmware_revision;
+        if (!device->hardware_revision.empty())
+          device_info["hw_version"] = device->hardware_revision;
         device_info["via_device"] = get_mac_address();
         device_info["serial_number"] = "mesh-id " + std::to_string(device->mesh_id);
       },
