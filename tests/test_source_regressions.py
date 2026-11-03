@@ -136,6 +136,17 @@ class ConnectionRegressions(unittest.TestCase):
         self.assertIn("this->last_notification_ms_ = esphome::millis()", CONN_CPP)
         self.assertIn("if (packet.size() != 20) break;", CONN_CPP)
 
+    def test_connection_diagnostics_are_published_throttled(self):
+        mqtt = (ROOT / "components/awox_mesh/awox_mesh_mqtt.cpp").read_text()
+        header = (ROOT / "components/awox_mesh/awox_mesh_mqtt.h").read_text()
+        for field in ("connection_attempts", "connection_failures", "disconnect_count",
+                      "queue_length", "failed_command_writes", "dropped_commands",
+                      "rssi", "last_disconnect_reason", "last_notification_age_s"):
+            self.assertIn(f'connection["{field}"]', mqtt)
+        self.assertIn("now - this->last_diagnostic_publish_ms_ < 30000", mqtt)
+        self.assertIn("this->last_diagnostic_publish_ms_ = now", mqtt)
+        self.assertIn("last_diagnostic_publish_ms_", header)
+
 
 if __name__ == "__main__":
     unittest.main()

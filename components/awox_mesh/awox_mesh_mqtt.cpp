@@ -67,6 +67,7 @@ void AwoxMeshMqtt::publish_connected(int active_connections, int online_devices,
     this->last_published_availability_.clear();
     this->last_published_active_connections_ = -1;
     this->last_published_online_devices_ = -1;
+    this->last_diagnostic_publish_ms_ = 0;
   }
   if (!this->published_connected) {
     // todo.... find proper solution
@@ -83,9 +84,11 @@ void AwoxMeshMqtt::publish_connected(int active_connections, int online_devices,
     global_mqtt_client->publish(global_mqtt_client->get_topic_prefix() + "/connected", message, 0, true);
   }
 
+  const uint32_t now = esphome::millis();
   const bool changed = this->last_published_active_connections_ != active_connections ||
                        this->last_published_online_devices_ != online_devices;
-  if (!changed && !reconnected) return;
+  // Publish quickly for connection changes, but cap periodic telemetry at 30s.
+  if (!changed && !reconnected && now - this->last_diagnostic_publish_ms_ < 30000) return;
 
   ESP_LOGI(TAG, "Publish connection info, %d connections, %d device online", active_connections, online_devices);
 
@@ -102,6 +105,30 @@ void AwoxMeshMqtt::publish_connected(int active_connections, int online_devices,
           connection["mesh_id"] = connections[i]->connected() ? std::to_string(connections[i]->mesh_id()) : "";
           connection["devices"] = connections[i]->get_linked_mesh_ids().size();
 
+          // Lightweight per-slot diagnostics, serialized in the existing
+          // connection_status topic rather than adding separate state topics.
+          connection["connection_attempts"] = connections[i]->connection_attempts();
+          connection["connection_failures"] = connections[i]->connection_failures();
+          connection["disconnect_count"] = connections[i]->disconnect_count();
+          connection["queue_length"] = connections[i]->queued_commands();
+          connection["failed_command_writes"] = connections[i]->failed_command_writes();
+          connection["dropped_commands"] = connections[i]->dropped_commands();
+          const int rssi = connections[i]->last_rssi_dbm();
+          if (rssi >= -127 && rssi <= 0) connection["rssi"] = rssi;
+          else connection["rssi"] = nullptr;
+          if (connections[i]->last_disconnect_reason() >= 0) {
+            char reason[8];
+            snprintf(reason, sizeof(reason), "0x%02X", connections[i]->last_disconnect_reason());
+            connection["last_disconnect_reason"] = reason;
+          } else {
+            connection["last_disconnect_reason"] = nullptr;
+          }
+          if (connections[i]->has_notification()) {
+            connection["last_notification_age_s"] = connections[i]->ms_since_notification(now) / 1000U;
+          } else {
+            connection["last_notification_age_s"] = nullptr;
+          }
+
           std::stringstream mesh_ids;
           std::copy(connections[i]->get_linked_mesh_ids().begin(), connections[i]->get_linked_mesh_ids().end(),
                     std::ostream_iterator<int>(mesh_ids, ", "));
@@ -112,6 +139,7 @@ void AwoxMeshMqtt::publish_connected(int active_connections, int online_devices,
   if (status_published) {
     this->last_published_online_devices_ = online_devices;
     this->last_published_active_connections_ = active_connections;
+    this->last_diagnostic_publish_ms_ = now;
   }
   if (reconnected) {
     this->publish_connection_sensor_discovery(connections);

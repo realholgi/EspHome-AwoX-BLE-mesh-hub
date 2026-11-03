@@ -26,6 +26,7 @@ class AwoxMeshMqtt {
   int last_published_active_connections_{-1};
   int last_published_online_devices_{-1};
   bool mqtt_was_connected_{false};
+  uint32_t last_diagnostic_publish_ms_{0};
   std::set<int> subscribed_destinations_{};
 
   std::string get_mqtt_topic_for_(MeshDestination *mesh_destination, const std::string &suffix) const;
