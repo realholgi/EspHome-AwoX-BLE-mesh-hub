@@ -55,6 +55,23 @@ class ConnectionRegressions(unittest.TestCase):
         self.assertIn("delete found_device;", MESH_CPP)
         self.assertIn("FOUND_DEVICE_RECLAIM_MS = 600000", MESH_H)
 
+    def test_mesh_secrets_not_logged(self):
+        self.assertNotIn('ESP_LOGI("awox.mesh", "password:', MESH_H)
+        self.assertNotIn('session key %s', CONN_CPP)
+        self.assertNotIn('combine mesh name + password:', CONN_CPP)
+
+    def test_untrusted_mesh_packets_are_bounded(self):
+        self.assertIn("valid_mesh_frame_length(param->notify.value_len)", CONN_CPP)
+        self.assertIn("valid_mesh_frame_length(packet.size())", CONN_CPP)
+        self.assertIn("valid_command_payload_length(data.size())", CONN_CPP)
+        self.assertIn('this->random_key.assign(reinterpret_cast<const char *>(key), sizeof(key));', CONN_CPP)
+
+    def test_mqtt_reconnect_does_not_duplicate_subscriptions(self):
+        mqtt = (ROOT / "components/awox_mesh/awox_mesh_mqtt.cpp").read_text()
+        self.assertIn("const bool newly_subscribed = this->subscribed_destinations_", mqtt)
+        self.assertIn("this->mesh_->refresh_mqtt_discovery()", mqtt)
+        self.assertIn("if (status_published)", mqtt)
+
 
 if __name__ == "__main__":
     unittest.main()

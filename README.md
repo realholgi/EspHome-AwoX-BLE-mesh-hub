@@ -911,3 +911,26 @@ Remarks:
 - https://github.com/fsaris/home-assistant-awox
 - https://github.com/Leiaz/python-awox-mesh-light
 - https://github.com/vpaeder/telinkpp
+
+
+## Fork development and regression checks
+
+This fork includes [GitHub Actions](.github/workflows/regression.yml) that
+runs Python source regression tests, native C++ protocol-boundary assertions,
+and an ESPHome 2026.10.2 ESP-IDF firmware build using the **checked-out local
+AwoX component source**. GitHub CI does not test live BLE connections or
+Home Assistant state transitions; test those on an actual ESP32 before
+deploying changes to a production gateway.
+
+Run the fast checks locally:
+
+```bash
+python3 -m unittest discover -s tests -p 'test_*.py' -v
+c++ -std=c++17 -Wall -Wextra -Werror -pedantic -I. tests/test_protocol_safety.cpp -o /tmp/awox_protocol_tests
+/tmp/awox_protocol_tests
+```
+
+To test this fork in ESPHome, replace the upstream Git source with
+`https://github.com/realholgi/EspHome-AwoX-BLE-mesh-hub` and reference
+`main` or a specific tested commit. Keep `max_connections: 1` on
+single-device deployments until the multi-slot fix is validated on hardware.
