@@ -223,7 +223,7 @@ display:
         if (!isnan(id(battery_level).state))
           it.printf(151, 102, id(font_small), fg, "BAT %.0f%%",
                     id(battery_level).state);
-      } else {
+      } else if (id(display_page) == 1) {
         it.print(7, 4, id(font_small), subdued, "BLE DIAGNOSTICS");
         it.filled_circle(226, 12, 5, st.connected ? ok : bad);
         it.printf(7, 25, id(font_small), fg, "Attempts: %lu", static_cast<unsigned long>(st.attempts));
@@ -243,6 +243,30 @@ display:
         if (!isnan(id(free_heap).state))
           it.printf(7, 110, id(font_small), subdued, "Free heap: %.0f KB",
                     id(free_heap).state / 1024.0f);
+      } else {
+        it.print(7, 4, id(font_small), subdued, "GATEWAY / SYSTEM");
+        it.filled_circle(226, 12, 5, st.connected ? ok : bad);
+        if (!isnan(id(gateway_wifi_rssi).state))
+          it.printf(7, 27, id(font_small), fg, "WiFi RSSI: %.0f dBm", id(gateway_wifi_rssi).state);
+        else
+          it.print(7, 27, id(font_small), subdued, "WiFi RSSI: --");
+        if (!isnan(id(gateway_uptime).state)) {
+          const uint32_t seconds = static_cast<uint32_t>(id(gateway_uptime).state);
+          const unsigned long days = seconds / 86400UL;
+          const unsigned long hours = (seconds / 3600UL) % 24UL;
+          const unsigned long minutes = (seconds / 60UL) % 60UL;
+          it.printf(7, 46, id(font_small), fg, "Uptime: %lud %02luh %02lum", days, hours, minutes);
+        } else {
+          it.print(7, 46, id(font_small), subdued, "Uptime: --");
+        }
+        it.line(7, 70, 233, 70, Color(54, 73, 88));
+        it.print(7, 76, id(font_small), subdued, "EGLO Panel firmware");
+        if (st.lamp_firmware != nullptr)
+          it.print(7, 91, id(font_large), fg, st.lamp_firmware);
+        else
+          it.print(7, 91, id(font_large), subdued, "--");
+        it.printf(7, 118, id(font_small), st.connected ? ok : warn,
+                  "BLE: %s", st.connected ? "ONLINE" : "OFFLINE");
       }
 
 external_components:
