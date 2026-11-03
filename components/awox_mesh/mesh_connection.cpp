@@ -6,6 +6,7 @@
 #include "awox_mesh.h"
 #include "device_info.h"
 #include "helpers.h"
+#include "protocol_safety.h"
 #include "group.h"
 #include "aes/esp_aes.h"
 #include "esphome/core/application.h"
@@ -156,6 +157,11 @@ bool MeshConnection::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
         ESP_LOGW(TAG, "Notification received from different connection, skipped");
         break;
       }
+      if (this->notification_char == nullptr || param->notify.value == nullptr ||
+          !valid_mesh_frame_length(param->notify.value_len)) {
+        ESP_LOGW(TAG, "Invalid AwoX notification size or missing characteristic");
+        break;
+      }
       if (param->notify.handle != this->notification_char->handle) {
         ESP_LOGW(TAG, "Unknown notification received from handle %d: %s", param->notify.handle,
                  string_as_hex_string(std::string((char *) param->notify.value, param->notify.value_len)).c_str());
@@ -175,7 +181,19 @@ bool MeshConnection::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
         ESP_LOGW(TAG, "Error reading char at handle %d, status=%d", param->read.handle, param->read.status);
         break;
       }
-      if (param->read.handle == this->pair_char->handle) {
+      if (this->pair_char != nullptr && param->read.handle == this->pair_char->handle) {
+        if (param->read.value == nullptr || param->read.value_len == 0) {
+          ESP_LOGW(TAG, "Empty pairing response");
+          this->disconnect();
+          this->set_address(0);
+          break;
+        }
+        if (param->read.value[0] == 0x0d && param->read.value_len < 10) {
+          ESP_LOGW(TAG, "Truncated pairing response");
+          this->disconnect();
+          this->set_address(0);
+          break;
+        }
         if (param->read.value[0] == 0xd) {
           ESP_LOGI(TAG, "Response OK, let's go");
           this->generate_session_key(this->random_key,
@@ -237,7 +255,8 @@ void MeshConnection::setup_connection() {
 
   unsigned char key[8];
   esp_fill_random(key, 8);
-  this->random_key = std::string((char *) key).substr(0, 8);
+  // Random key is binary data, not a NUL-terminated C string.
+  this->random_key.assign(reinterpret_cast<const char *>(key), sizeof(key));
   std::string enc_data = this->key_encrypt(this->random_key);
   std::string packet = '\x0c' + this->random_key + enc_data.substr(0, 8);
   this->pair_char->write_value((uint8_t *) packet.data(), packet.size());
@@ -331,6 +350,7 @@ std::string MeshConnection::encrypt_packet(std::string &packet) const {
 }
 
 std::string MeshConnection::decrypt_packet(std::string &packet) const {
+  if (!valid_mesh_frame_length(packet.size())) return {};
   std::string iv = '\0' + this->reverse_address.substr(0, 3) + packet.substr(0, 5);
   iv.append(7, 0);
 
@@ -347,6 +367,10 @@ std::string MeshConnection::decrypt_packet(std::string &packet) const {
 void MeshConnection::set_disconnect_callback(std::function<void()> &&f) { this->disconnect_callback = std::move(f); }
 
 void MeshConnection::handle_packet(std::string &packet) {
+  if (!valid_mesh_frame_length(packet.size())) {
+    ESP_LOGW(TAG, "Ignoring malformed AwoX mesh packet");
+    return;
+  }
   int mesh_id, mode;
   bool online, state, color_mode, sequence_mode, candle_mode;
   unsigned char white_brightness, temperature, color_brightness, R, G, B;
@@ -552,6 +576,10 @@ All multi-byte elements are in little-endian form.
 Packet counter runs between 1 and 0xffff.
 */
   ESP_LOGV(TAG, "command: %d, data: %s, dest: %d", command, string_as_hex_string(data).c_str(), dest);
+  if (!valid_command_payload_length(data.size())) {
+    ESP_LOGW(TAG, "Rejected oversized AwoX command payload (%u bytes)", static_cast<unsigned>(data.size()));
+    return {};
+  }
   std::string packet;
   packet.resize(20, 0);
   packet[0] = this->packet_count & 0xff;
@@ -587,6 +615,7 @@ bool MeshConnection::write_command(int command, const std::string &data, int des
   ESP_LOGD(TAG, "[%u] [%s] [%u] write_command packet %02X => %s", this->get_conn_id(), this->address_str_, dest,
            command, string_as_hex_string(data).c_str());
   std::string packet = this->build_packet(dest, command, data);
+  if (packet.empty() || this->command_char == nullptr || !this->connected()) return false;
   // todo: withResponse
   auto status = this->command_char->write_value((uint8_t *) packet.data(), packet.size());
   // todo: check write return value
