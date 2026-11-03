@@ -86,6 +86,10 @@ class MeshConnection : public esp32_ble_client::BLEClientBase {
   int last_disconnect_reason_{-1};
   int last_rssi_dbm_{-127};
   bool established_session_{false};
+  uint32_t failed_command_writes_{0};
+  uint32_t dropped_commands_{0};
+  uint32_t last_notification_ms_{0};
+  bool has_notification_{false};
 
   esp32_ble_client::BLECharacteristic *notification_char{nullptr};
   esp32_ble_client::BLECharacteristic *command_char{nullptr};
@@ -167,6 +171,11 @@ class MeshConnection : public esp32_ble_client::BLEClientBase {
   uint32_t disconnect_count() const { return this->disconnect_count_; }
   int last_disconnect_reason() const { return this->last_disconnect_reason_; }
   int last_rssi_dbm() const;
+  size_t queued_commands() const { return this->command_queue.size(); }
+  uint32_t failed_command_writes() const { return this->failed_command_writes_; }
+  uint32_t dropped_commands() const { return this->dropped_commands_; }
+  bool has_notification() const { return this->has_notification_; }
+  uint32_t ms_since_notification(uint32_t now) const { return now - this->last_notification_ms_; }
 
   bool mesh_id_linked(int mesh_id);
 

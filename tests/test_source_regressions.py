@@ -127,6 +127,15 @@ class ConnectionRegressions(unittest.TestCase):
         # No change to the same-MAC guard that previously caused a crash.
         self.assertIn("if (address == this->get_address()) return;", CONN_CPP)
 
+    def test_packet_age_and_write_failure_diagnostics(self):
+        for marker in ("failed_command_writes_", "dropped_commands_", "has_notification_",
+                       "last_notification_ms_", "ms_since_notification"):
+            self.assertIn(marker, CONN_H)
+        self.assertIn("++this->failed_command_writes_", CONN_CPP)
+        self.assertIn("++this->dropped_commands_", CONN_CPP)
+        self.assertIn("this->last_notification_ms_ = esphome::millis()", CONN_CPP)
+        self.assertIn("if (packet.size() != 20) break;", CONN_CPP)
+
 
 if __name__ == "__main__":
     unittest.main()

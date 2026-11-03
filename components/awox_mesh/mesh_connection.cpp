@@ -133,7 +133,9 @@ void MeshConnection::loop() {
     return;
   }
 
+  ++this->failed_command_writes_;
   if (++item.attempts >= MAX_COMMAND_ATTEMPTS) {
+    ++this->dropped_commands_;
     ESP_LOGW(TAG, "Dropping AwoX command after %u failed sends", static_cast<unsigned>(item.attempts));
     this->command_queue.pop_front();
   } else {
@@ -199,6 +201,9 @@ bool MeshConnection::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt_if
       }
       std::string notification = std::string((char *) param->notify.value, param->notify.value_len);
       std::string packet = this->decrypt_packet(notification);
+      if (packet.size() != 20) break;
+      this->has_notification_ = true;
+      this->last_notification_ms_ = esphome::millis();
       ESP_LOGV(TAG, "Notification received: %s", string_as_hex_string(packet).c_str());
       this->handle_packet(packet);
       break;
@@ -648,6 +653,7 @@ void MeshConnection::queue_command(int command, const std::string &data, int des
     return;
   }
   if (this->command_queue.size() >= MAX_QUEUED_COMMANDS) {
+    ++this->dropped_commands_;
     ESP_LOGW(TAG, "AwoX command queue full; dropping oldest pending command");
     this->command_queue.pop_front();
   }
