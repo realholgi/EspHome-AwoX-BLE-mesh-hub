@@ -1,0 +1,236 @@
+# M5StickC Plus: AwoX gateway + local two-page status display
+# Hardware-tested TFT pins from the M5StickC Plus installation.
+# ESPHome 2026.10.2; customize credentials and MQTT broker.
+# This sample adds no extra BLE requests. AXP192 controls the backlight power.
+esphome:
+  name: m5stick
+
+esp32:
+  board: m5stick-c
+  framework:
+    type: esp-idf
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  power_save_mode: none
+
+logger:
+  level: INFO
+
+ota:
+  - platform: esphome
+
+mqtt:
+  broker: 192.168.100.60
+  port: 1883
+  username: shelly
+  password: !secret mqtt_password
+  discovery_retain: false
+  log_topic: null
+  reboot_timeout: 0s
+
+debug:
+  update_interval: 60s
+
+i2c:
+  - id: bus_a
+    sda: GPIO21
+    scl: GPIO22
+    scan: true
+
+spi:
+  clk_pin: GPIO13
+  mosi_pin: GPIO15
+
+sensor:
+  - platform: debug
+    free:
+      id: free_heap
+      name: "Free Heap"
+    block:
+      name: "Largest Free Block"
+    min_free:
+      name: "Minimum Free Heap"
+
+  - platform: axp192
+    id: axp_power
+    model: M5STICKC
+    i2c_id: bus_a
+    address: 0x34
+    update_interval: 30s
+
+    battery_level:
+      id: battery_level
+      name: "M5Stick Battery Level"
+    charging:
+      name: "M5Stick Charging"
+    battery_voltage:
+      name: "M5Stick Battery Voltage"
+    battery_charge_current:
+      name: "M5Stick Battery Charge Current"
+    battery_discharge_current:
+      name: "M5Stick Battery Discharge Current"
+    usb_connected:
+      id: usb_connected
+      name: "M5Stick USB Connected"
+    usb_voltage:
+      name: "M5Stick USB Voltage"
+    usb_current:
+      name: "M5Stick USB Current"
+    i2c_errors:
+      name: "M5Stick I2C Errors"
+    battery_curve: lipo
+    battery_smoothing: 0.3
+
+number:
+  - platform: axp192
+    axp192_id: axp_power
+    name: "Display Helligkeit"
+    mode: slider
+    initial_value: 100
+    restore_value: true
+
+switch:
+  - platform: axp192
+    id: display_enabled
+    axp192_id: axp_power
+    name: "Display Enabled"
+    restore_value: true
+    initial_value: true
+    auto_off: 5min
+
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: GPIO37
+      inverted: true
+    name: "M5Stick Button A"
+    filters:
+      - delayed_on_off: 20ms
+    on_press:
+      - switch.turn_on: display_enabled
+
+  # M5StickC Plus button B (input-only GPIO; do not use internal pull-up).
+  - platform: gpio
+    pin:
+      number: GPIO39
+      inverted: true
+    name: "M5Stick Button B"
+    filters:
+      - delayed_on_off: 20ms
+    on_press:
+      - lambda: |-
+          id(display_page) = (id(display_page) + 1) % 2;
+      - switch.turn_on: display_enabled
+      - component.update: gateway_display
+
+globals:
+  - id: display_page
+    type: int
+    restore_value: false
+    initial_value: '0'
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_small
+    size: 13
+  - file: "gfonts://Roboto"
+    id: font_large
+    size: 26
+
+# mipi_spi replaces the deprecated st7789v driver. T-DISPLAY supplies
+# the 135x240 panel geometry and offsets, while the GPIOs below are the
+# working M5StickC Plus wiring. 270 degrees gives a 240x135 landscape UI.
+display:
+  - platform: mipi_spi
+    id: gateway_display
+    model: T-DISPLAY
+    cs_pin: GPIO5
+    dc_pin: GPIO23
+    reset_pin: GPIO18
+    rotation: 270
+    color_depth: 8
+    buffer_size: 25%
+    update_interval: 3s
+    lambda: |-
+      const auto st = id(awox_gateway).get_display_status();
+      const Color bg(10, 18, 28);
+      const Color fg(238, 244, 250);
+      const Color subdued(160, 180, 197);
+      const Color ok(68, 211, 123);
+      const Color bad(245, 92, 92);
+      const Color warn(255, 186, 71);
+      it.fill(bg);
+
+      if (id(display_page) == 0) {
+        it.print(7, 4, id(font_small), subdued, "AWOX / EGLO PANEL");
+        it.filled_circle(226, 12, 5, st.connected ? ok : bad);
+        it.print(7, 23, id(font_small), subdued, "Lamp");
+        const char *lamp = !st.lamp_known ? "WAITING" :
+                           !st.lamp_online ? "OFFLINE" : (st.lamp_on ? "ON" : "OFF");
+        it.print(7, 39, id(font_large), st.lamp_online ? ok : warn, lamp);
+        if (st.rssi_valid)
+          it.printf(153, 48, id(font_small), fg, "%d dBm", st.rssi_dbm);
+        else
+          it.print(153, 48, id(font_small), subdued, "RSSI --");
+        it.line(7, 77, 233, 77, Color(54, 73, 88));
+        it.printf(7, 84, id(font_small), fg, "BLE: %s  Mesh: %u",
+                  st.connected ? "UP" : "DOWN", st.online_devices);
+        if (st.notification_seen)
+          it.printf(7, 102, id(font_small), fg, "Last packet: %us",
+                    st.notification_age_s);
+        else
+          it.print(7, 102, id(font_small), subdued, "Last packet: --");
+        if (!isnan(id(battery_level).state))
+          it.printf(151, 102, id(font_small), fg, "BAT %.0f%%",
+                    id(battery_level).state);
+      } else {
+        it.print(7, 4, id(font_small), subdued, "BLE DIAGNOSTICS");
+        it.filled_circle(226, 12, 5, st.connected ? ok : bad);
+        it.printf(7, 25, id(font_small), fg, "Attempts: %u", st.attempts);
+        it.printf(125, 25, id(font_small), fg, "Disconnects: %u", st.disconnects);
+        it.printf(7, 44, id(font_small), fg, "Failed: %u", st.failed_connections);
+        if (st.disconnect_reason >= 0)
+          it.printf(125, 44, id(font_small), warn, "Reason: 0x%02X",
+                    st.disconnect_reason);
+        else
+          it.print(125, 44, id(font_small), subdued, "Reason: --");
+        it.printf(7, 63, id(font_small), fg, "Queue: %u", st.queued_commands);
+        it.printf(125, 63, id(font_small), fg, "Write err: %u", st.failed_writes);
+        it.printf(7, 82, id(font_small), fg, "Dropped: %u", st.dropped_commands);
+        if (st.rssi_valid)
+          it.printf(125, 82, id(font_small), fg, "RSSI: %d", st.rssi_dbm);
+        it.line(7, 105, 233, 105, Color(54, 73, 88));
+        if (!isnan(id(free_heap).state))
+          it.printf(7, 110, id(font_small), subdued, "Free heap: %.0f KB",
+                    id(free_heap).state / 1024.0f);
+      }
+
+external_components:
+  - source: github://realholgi/esphome-axp192@main
+    components: [axp192]
+    refresh: 1d
+  - source:
+      type: git
+      url: https://github.com/realholgi/EspHome-AwoX-BLE-mesh-hub
+      ref: main
+    components: [awox_mesh]
+    refresh: 1d
+
+esp32_ble_tracker:
+  scan_parameters:
+    active: false
+
+awox_mesh:
+  id: awox_gateway
+  mesh_name: !secret mesh_name
+  mesh_password: !secret mesh_password
+  max_connections: 1
+  device_info:
+    - product_id: 0x30
+      device_type: RGB
+      manufacturer: EGLO
+      name: EGLOPanel 30x120
+      model: EPanel_120
+      icon: mdi:ceiling-light
