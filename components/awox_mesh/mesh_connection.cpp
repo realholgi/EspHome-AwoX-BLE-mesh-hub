@@ -69,6 +69,9 @@ void MeshConnection::set_address(uint64_t address) {
   }
 
   if (address == 0) {
+    // Commands queued for a previous mesh connection must not be sent
+    // after this slot is assigned to a different device.
+    this->command_queue.clear();
     this->disconnect_callback();
 
     // Mark each linked mesh device as offline
@@ -103,25 +106,23 @@ void MeshConnection::set_address(uint64_t address) {
 void MeshConnection::loop() {
   esp32_ble_client::BLEClientBase::loop();
 
-  if (this->connected() && !this->command_queue.empty() &&
-      this->last_send_command < esphome::millis() - this->command_debounce_time) {
-    ESP_LOGV(TAG, "Send command, time since last command: %d", (int) (esphome::millis() - this->last_send_command));
-    this->last_send_command = esphome::millis();
-    QueuedCommand item = this->command_queue.front();
-    ESP_LOGV(TAG, "Send command %u, for dest: %u", item.command, item.dest);
-    this->command_queue.pop_front();
-    ESP_LOGV(TAG, "Remove item from queue");
-    this->write_command(item.command, item.data, item.dest, false);
+  if (!this->connected() || this->command_queue.empty()) return;
+  const uint32_t now = esphome::millis();
+  if (now - this->last_send_command < this->command_debounce_time) return;
 
-    if (!this->command_queue.empty()) {
-      ESP_LOGI(TAG, "still %d queued commands", this->command_queue.size());
-    }
-  } else if (!this->command_queue.empty()) {
-    QueuedCommand item = this->command_queue.front();
-    ESP_LOGI(TAG, "%d queued commands (debounce timer: %d, next command %02X, for dest: %u)",
-             this->command_queue.size(),
-             (int) (esphome::millis() - this->last_send_command - this->command_debounce_time), item.command,
-             (int) item.dest);
+  this->last_send_command = now;
+  QueuedCommand &item = this->command_queue.front();
+  if (this->write_command(item.command, item.data, item.dest, false)) {
+    this->command_queue.pop_front();
+    return;
+  }
+
+  if (++item.attempts >= MAX_COMMAND_ATTEMPTS) {
+    ESP_LOGW(TAG, "Dropping AwoX command after %u failed sends", static_cast<unsigned>(item.attempts));
+    this->command_queue.pop_front();
+  } else {
+    ESP_LOGW(TAG, "AwoX command write failed, retry %u/%u",
+             static_cast<unsigned>(item.attempts), static_cast<unsigned>(MAX_COMMAND_ATTEMPTS));
   }
 }
 
@@ -605,11 +606,15 @@ Packet counter runs between 1 and 0xffff.
 }
 
 void MeshConnection::queue_command(int command, const std::string &data, int dest) {
-  QueuedCommand item = {};
-  item.data = data;
-  item.command = command;
-  item.dest = dest;
-  this->command_queue.push_back(item);
+  if (!valid_command_payload_length(data.size())) {
+    ESP_LOGW(TAG, "Ignoring oversized AwoX command data");
+    return;
+  }
+  if (this->command_queue.size() >= MAX_QUEUED_COMMANDS) {
+    ESP_LOGW(TAG, "AwoX command queue full; dropping oldest pending command");
+    this->command_queue.pop_front();
+  }
+  this->command_queue.push_back({command, data, dest, 0});
 }
 
 bool MeshConnection::write_command(int command, const std::string &data, int dest, bool withResponse) {

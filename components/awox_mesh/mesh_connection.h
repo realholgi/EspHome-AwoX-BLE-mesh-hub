@@ -52,6 +52,7 @@ struct QueuedCommand {
   int command;
   std::string data;
   int dest;
+  uint8_t attempts{0};
 };
 
 struct FoundDevice;
@@ -66,6 +67,8 @@ class MeshConnection : public esp32_ble_client::BLEClientBase {
   uint32_t command_debounce_time = 180;
 
   std::deque<QueuedCommand> command_queue{};
+  static constexpr size_t MAX_QUEUED_COMMANDS = 32;
+  static constexpr uint8_t MAX_COMMAND_ATTEMPTS = 3;
 
   std::function<void()> disconnect_callback;
 

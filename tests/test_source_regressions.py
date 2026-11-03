@@ -31,6 +31,13 @@ class ConnectionRegressions(unittest.TestCase):
 
     def test_overlapping_mesh_ids_check_all_pairs(self):
         self.assertIn("for (int j = i + 1; j < connections_count; ++j)", MESH_CPP)
+    def test_command_queue_has_limits_and_retries(self):
+        self.assertIn("MAX_QUEUED_COMMANDS = 32", CONN_H)
+        self.assertIn("MAX_COMMAND_ATTEMPTS = 3", CONN_H)
+        self.assertIn("if (this->write_command(item.command, item.data, item.dest, false))", CONN_CPP)
+        self.assertIn("if (++item.attempts >= MAX_COMMAND_ATTEMPTS)", CONN_CPP)
+        self.assertIn("this->command_queue.clear();", CONN_CPP)
+        self.assertIn("this->command_queue.size() >= MAX_QUEUED_COMMANDS", CONN_CPP)
 
 
 if __name__ == "__main__":
