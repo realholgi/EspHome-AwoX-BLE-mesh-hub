@@ -983,7 +983,7 @@ Home Assistant reconnects.
 
 ## M5StickC Plus local status display
 
-The [two-page M5StickC Plus example](sample-config/m5stickcplus-gateway-display.yaml)
+The [three-page M5StickC Plus example](sample-config/m5stickcplus-gateway-display.yaml)
 uses ESPHome 2026.10.2's `mipi_spi` driver with the known working
 M5StickC Plus SPI pins: CLK GPIO13, MOSI GPIO15, CS GPIO5,
 DC GPIO23, reset GPIO18 and 270-degree rotation. It uses the `T-DISPLAY`
@@ -995,8 +995,10 @@ DC GPIO23, reset GPIO18 and 270-degree rotation. It uses the `T-DISPLAY`
 - **Page 2 (diagnostics)**: connection attempts, disconnects, failed
   attempts, GATT disconnect reason, pending commands, write failures,
   dropped commands, RSSI and free heap.
+- **Page 3 (system)**: Wi-Fi RSSI, device uptime, cached EGLO panel firmware revision and BLE link status. Values are local display data and are not exposed as additional Home Assistant entities.
+- **Red LED (GPIO10)**: active-low, normally off. After at least 60 seconds without a BLE link, blink for 150ms every 5 seconds; automatically stop after reconnection. No additional BLE requests.
 - **Button A (GPIO37)**: wake the display via the AXP192 switch.
-- **Button B (GPIO39)**: switch between the two pages and wake the display.
+- **Button B (GPIO39)**: cycle through the three pages and wake the display.
 - **Power behavior**: AXP192 retains the display-brightness control and
   its existing `auto_off: 5min`. Only the backlight rail is switched;
   Wi-Fi, BLE mesh control and MQTT continue to run.
